@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="default">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JASVA Quantum Operating System</title>
+    <link rel="stylesheet" href="index.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        // Disable window.native to prevent accessibility COM recursion crashes on Windows
+        try { delete window.native; } catch(e) {}
+        Object.defineProperty(window, 'native', {
+            get: function() { return null; },
+            set: function(val) {},
+            enumerable: false,
+            configurable: true
+        });
+    </script>
+</head>
+<body>
+    <div class="jarvis-container">
+        <!-- Sci-Fi background grid & ambient light orb -->
+        <div class="grid-overlay"></div>
+        <div class="ambient-glow-orb top-left"></div>
+        <div class="ambient-glow-orb bottom-right"></div>
+
+        <!-- QUANTUM TOP COMMAND HEADER BAR -->
+        <header class="quantum-top-bar pywebview-drag-region">
+            <!-- Brand Logo & Core Status -->
+            <div class="brand-section">
+                <div class="brand-logo">
+                    <div class="logo-core-pulse"></div>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="logo-icon">
+                        <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                        <polyline points="2 17 12 22 22 17"/>
+                        <polyline points="2 12 12 17 22 12"/>
+                    </svg>
+                </div>
+                <div class="brand-text">
+                    <span class="brand-title">JASVA</span>
+                    <span class="brand-subtitle">QUANTUM OS v4.2</span>
+                </div>
+            </div>
+
+            <!-- Central telemetry center relocated to Portal Greeting panel below -->
+
+            <!-- Action Toolbar & Window Controls -->
+            <div class="header-action-toolbar">
+                <div class="hud-dropdown-container">
+                    <button class="hud-dropdown-trigger" id="hudMenuTrigger" onclick="window.toggleHudMenu()">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
+                            <line x1="3" y1="12" x2="21" y2="12"></line>
+                            <line x1="3" y1="6" x2="21" y2="6"></line>
+                            <line x1="3" y1="18" x2="21" y2="18"></line>
+                        </svg>
+                        <span>PANELS</span>
+                    </button>
+                    <div class="hud-dropdown-menu" id="hudDropdownMenu">
+                        <label class="menu-item">
+                            <input type="checkbox" id="chk-chatPanel" checked onchange="window.togglePanelFromMenu('chatPanel')">
+                            <span>CHAT</span>
+                        </label>
+                        <label class="menu-item">
+                            <input type="checkbox" id="chk-activeListeningPanel" checked onchange="window.togglePanelFromMenu('activeListeningPanel')">
+                            <span>SPHERE</span>
+                        </label>
+                        <label class="menu-item">
+                            <input type="checkbox" id="chk-commandEchoPanel" checked onchange="window.togglePanelFromMenu('commandEchoPanel')">
+                            <span>LOG</span>
+                        </label>
+                        <label class="menu-item">
+                            <input type="checkbox" id="chk-systemPanel" checked onchange="window.togglePanelFromMenu('systemPanel')">
+                            <span>SYSTEM</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="quick-theme-selector">
+                    <select id="headerThemeSelect" class="header-select-pill" onchange="window.changeHudTheme(this.value)">
+                        <option value="default">Quantum Cyan</option>
+                        <option value="purple">Cyber Violet</option>
+                        <option value="green">Matrix Emerald</option>
+                        <option value="orange">Solar Amber</option>
+                        <option value="red">Blood Crimson</option>
+                        <option value="light">Crisp Light</option>
+                    </select>
+                </div>
+
+                <button class="hud-icon-btn" id="voiceToggleBtn" title="Toggle Voice Speech Output">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="15" height="15" id="speakerIcon">
+                        <path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.5A1.5 1.5 0 003 9v6a1.5 1.5 0 001.5 1.5h1.94l4.5 4.5c.944.945 2.56.276 2.56-1.06V4.06zM18.57 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+                    </svg>
+                </button>
+
+                <button class="hud-icon-btn" id="alwaysListenHeaderBtn" title="Toggle Continuous Listening (Always On)">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="15" height="15">
+                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
+                    </svg>
+                </button>
+
+                <button class="hud-icon-btn" id="settingsToggleBtn" title="System Settings">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="15" height="15">
+                        <path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/>
+                    </svg>
+                </button>
+
+                <div class="window-control-buttons">
+                    <button class="hud-icon-btn" id="minimizeBtn" title="Minimize Window" onclick="window.minimizeWindow()">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                    </button>
+                    <button class="hud-icon-btn close-danger" id="closeAppBtn" title="Power / Exit JASVA" onclick="window.exitApplication()">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
+                            <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+                            <line x1="12" y1="2" x2="12" y2="12"></line>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- MAIN WORKSPACE LAYOUT -->
+        <div class="hud-layout left-open right-open">
+            <!-- 1. LEFT PANEL: NEURAL COMMUNICATION CORE -->
+            <div class="panel-window left-panel chat-panel" id="chatPanel">
+                <div class="panel-header pywebview-drag-region">
+                    <div class="panel-title-group">
+                        <span class="panel-title">CHAT</span>
+                        <div class="system-status">
+                            <span class="status-dot online" id="statusDot"></span>
+                            <span class="status-text" id="statusIndicator">JASVA STANDBY</span>
+                        </div>
+                    </div>
+                    <button class="panel-close-dot" onclick="window.closePanel('chatPanel')" title="Close Panel"></button>
+                </div>
+
+                <!-- Chat Stream -->
+                <div class="chat-container scrollable" id="chatContainer">
+                    <div class="chat-message bot-message">
+                        <div class="message-sender">
+                            <span class="sender-avatar">AI</span>
+                            <span>JASVA</span>
+                        </div>
+                        <div class="message-text">Quantum neural engine online. All systems nominal, sir. How may I assist you today?</div>
+                    </div>
+                </div>
+
+                <!-- Input Dock & Attachment Previews -->
+                <div class="chat-input-area">
+                    <div id="imagePreviewContainer" class="image-preview-dock" style="display: none;">
+                        <img id="imagePreview" src="" alt="Attachment Preview" />
+                        <span id="imageNameText">image.png</span>
+                        <button onclick="window.clearAttachedImage()">&times;</button>
+                    </div>
+                    <div class="input-container">
+                        <input type="file" id="imageInput" accept="image/*" style="display: none;" onchange="window.onImageSelected(event)">
+                        <button id="uploadImageBtn" title="Attach Image" onclick="document.getElementById('imageInput').click()">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                <circle cx="8.5" cy="8.5" r="1.5"/>
+                                <polyline points="21 15 16 10 5 21"/>
+                            </svg>
+                        </button>
+                        <input type="text" id="textInput" placeholder="Send command or message (e.g. open notepad)..." autocomplete="off">
+                        <button id="sendBtn" title="Send (Enter)">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Left Dynamic Resizer -->
+            <div class="hud-resizer" id="leftResizer"></div>
+
+            <!-- 2. MIDDLE STAGE: 3D SPHERE, GREETING, COGNITION TERMINAL -->
+            <div class="middle-column">
+                <!-- TOP PANEL: PORTAL GREETING -->
+                <div class="panel-window portal-greeting-panel" id="portalGreetingPanel">
+                    <div class="panel-header pywebview-drag-region">
+                        <span class="panel-title">STATUS</span>
+                        <button class="panel-close-dot" onclick="window.closePanel('portalGreetingPanel')" title="Close Panel"></button>
+                    </div>
+                    <div class="portal-banner-content">
+                        <div class="header-telemetry-center portal-telemetry">
+                            <div class="telemetry-pill clock-pill">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <polyline points="12 6 12 12 16 14"></polyline>
+                                </svg>
+                                <span class="clock-time" id="portalTime">00:00:00 AM</span>
+                                <span class="clock-date-badge" id="portalDate">MON, JUL 26</span>
+                            </div>
+                            <div class="telemetry-pill weather-pill">
+                                <svg class="weather-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="4"/>
+                                    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+                                </svg>
+                                <span id="portalTemp" class="temp-text">--°C</span>
+                                <span id="portalLocation" class="loc-text">CONNECTING</span>
+                            </div>
+                            <!-- Device Connection Status Pills -->
+                            <div class="telemetry-pill device-pill" id="portalTvPill" title="Smart TV connection status">
+                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                                <span class="device-pill-status" id="portalTvStatus">TV: OFFLINE</span>
+                            </div>
+                            <div class="telemetry-pill device-pill" id="portalPhonePill" title="Phone connection status">
+                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                                <span class="device-pill-status" id="portalPhoneStatus">PHONE: OFFLINE</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="hud-v-resizer" id="midTopResizer"></div>
+
+                <!-- CENTER PANEL: 3D SPHERE -->
+                <div class="panel-window active-listening-panel" id="activeListeningPanel">
+                    <div class="panel-header pywebview-drag-region">
+                        <span class="panel-title">SPHERE</span>
+                        <button class="panel-close-dot" onclick="window.closePanel('activeListeningPanel')" title="Close Panel"></button>
+                    </div>
+                    
+                    <div class="visualizer-container">
+                        <canvas id="wavesCanvas" class="waves-canvas"></canvas>
+                        <p class="instruction" id="statusLabel">CLICK SPHERE TO COMMENCE SPEECH</p>
+                    </div>
+
+                </div>
+
+                <div class="hud-v-resizer" id="midBotResizer"></div>
+
+                <!-- BOTTOM PANEL: COMMAND ECHO & VOICE SPECTRUM -->
+                <div class="panel-window command-echo-panel" id="commandEchoPanel">
+                    <div class="panel-header pywebview-drag-region">
+                        <span class="panel-title">LOG</span>
+                        <button class="panel-close-dot" onclick="window.closePanel('commandEchoPanel')" title="Close Panel"></button>
+                        <div class="diagnostic-tag">LIVE</div>
+                    </div>
+                    
+                    <!-- Voice Graph Audio Spectrum Canvas & Logs Content Wrapper -->
+                    <div class="bottom-panel-content">
+                        <!-- Voice Graph Audio Spectrum Canvas -->
+                        <div class="listening-spectrum-container">
+                            <span id="valAudioStatus" class="spectra-status">SPECTRUM: STANDBY</span>
+                            <canvas id="spectrumCanvas" class="spectra-canvas"></canvas>
+                        </div>
+
+                        <div class="echo-logs-container scrollable" id="echoLogsContainer">
+                            <div class="echo-log-line system">[SYSTEM] QUANTUM NEURAL LINK: ACTIVE</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Dynamic Resizer -->
+            <div class="hud-resizer" id="rightResizer"></div>
+
+            <!-- 3. RIGHT PANEL: SYSTEM MONITOR + DEVICE CONTROL HUB -->
+<div class="panel-window right-panel system-panel" id="systemPanel">
+                <div class="panel-header pywebview-drag-region">
+                    <div class="panel-title-group">
+                        <span class="panel-title">SYSTEM</span>
+                        <div class="os-profile" id="osProfileText">WINDOWS</div>
+                    </div>
+                    <button class="panel-close-dot" onclick="window.closePanel('systemPanel')" title="Close Panel"></button>
+                </div>
+                
+                <div class="metrics-container scrollable">
+                    <div class="monitor-header">
+                        <span>RESOURCE MONITOR</span>
+                        <span class="monitor-live">LIVE</span>
+                    </div>
+                    <!-- CPU Metric Card -->
+                    <div class="metric-card" id="cardCPU">
+                        <div class="card-header">
+                            <span class="metric-label">CPU LOAD</span>
+                            <span class="metric-value" id="valCPU">0%</span>
+                        </div>
+                        <div class="progress-track">
+                            <div class="progress-fill" id="barCPU" style="width: 0%"></div>
+                        </div>
+                        <div class="graph-container">
+                            <canvas class="metric-graph" id="graphCPU"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- RAM Metric Card -->
+                    <div class="metric-card" id="cardRAM">
+                        <div class="card-header">
+                            <span class="metric-label">MEMORY USAGE</span>
+                            <span class="metric-value" id="valRAM">0%</span>
+                        </div>
+                        <div class="progress-track">
+                            <div class="progress-fill" id="barRAM" style="width: 0%"></div>
+                        </div>
+                        <div class="graph-container">
+                            <canvas class="metric-graph" id="graphRAM"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- GPU Metric Card -->
+                    <div class="metric-card" id="cardGPU">
+                        <div class="card-header">
+                            <span class="metric-label">GPU PROCESSING</span>
+                            <span class="metric-value" id="valGPU">0%</span>
+                        </div>
+                        <div class="progress-track">
+                            <div class="progress-fill" id="barGPU" style="width: 0%"></div>
+                        </div>
+                        <div class="graph-container">
+                            <canvas class="metric-graph" id="graphGPU"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Disk Metric Card -->
+                    <div class="metric-card" id="cardDisk">
+                        <div class="card-header">
+                            <span class="metric-label">STORAGE DRIVE</span>
+                            <span class="metric-value" id="valDisk">0%</span>
+                        </div>
+                        <div class="progress-track">
+                            <div class="progress-fill" id="barDisk" style="width: 0%"></div>
+                        </div>
+                        <div class="graph-container">
+                            <canvas class="metric-graph" id="graphDisk"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <!-- /TOP: Resource Monitor -->
+
+                <!-- ═══════════════════════════════════════ -->
+                <!--       BOTTOM: DEVICE CONTROL HUB       -->
+                <!-- ═══════════════════════════════════════ -->
+                <div class="device-hub-panel scrollable" id="deviceHubPanel">
+
+                    <!-- TV REMOTE SECTION -->
+                    <div class="device-section" id="tvSection">
+                        <div class="device-section-header">
+                            <div class="device-section-title-row">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                                <span class="device-section-label">SMART TV</span>
+                            </div>
+                            <div class="device-status-badge" id="tvStatusBadge">
+                                <span class="device-status-dot" id="tvStatusDot"></span>
+                                <span id="tvStatusText">DISCONNECTED</span>
+                            </div>
+                        </div>
+
+                        <div class="device-ip-row">
+                            <input type="text" id="tvIpPcInput" class="device-ip-input" placeholder="TV IP address (e.g. 192.168.1.100)" />
+                            <button class="device-connect-btn" id="tvConnectBtn" onclick="window.connectTv()" title="Connect to TV">
+                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                                LINK
+                            </button>
+                        </div>
+
+                        <div class="tv-apps-grid">
+                            <button class="tv-app-btn" id="tvAppYt" onclick="window.tvApp('youtube')" title="Launch YouTube TV">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="#ff0000"><path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.11C19.517 3.545 12 3.545 12 3.545s-7.516 0-9.387.507A3.002 3.002 0 0 0 .503 6.163C0 8.037 0 12 0 12s0 3.963.502 5.837a3.002 3.002 0 0 0 2.111 2.11C4.483 20.455 12 20.455 12 20.455s7.517 0 9.387-.508a3.003 3.003 0 0 0 2.11-2.11c.501-1.874.501-5.837.501-5.837s0-3.963-.501-5.837zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                                <span>YouTube</span>
+                            </button>
+                            <button class="tv-app-btn" id="tvAppNetflix" onclick="window.tvApp('netflix')" title="Launch Netflix">
+                                <span style="color:#e50914;font-weight:900;font-size:1.1rem;line-height:1;">N</span>
+                                <span>Netflix</span>
+                            </button>
+                            <button class="tv-app-btn" id="tvAppPrime" onclick="window.tvApp('prime video')" title="Launch Prime Video">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="#00a8e1"><path d="M13.958 10.09c0 1.232.029 2.256-.591 3.351-.502.891-1.301 1.438-2.186 1.438-1.214 0-1.922-.924-1.922-2.292 0-2.692 2.415-3.182 4.7-3.182v.685zm3.186 7.705a.661.661 0 01-.77.074 7.797 7.797 0 01-1.837-2.139C13.046 17.218 11.392 17.7 9.4 17.7 7.076 17.7 5.25 16.261 5.25 13.39c0-2.199 1.193-3.697 2.892-4.426 1.475-.644 3.538-.758 5.113-.937v-.35c0-.642.05-1.401-.328-1.957-.328-.497-.953-.702-1.505-.702-1.022 0-1.933.525-2.156 1.613-.046.242-.224.481-.468.493l-2.615-.283C5.93 6.658 7.875 5.4 10.25 5.4c1.226 0 2.826.326 3.793 1.252 1.226 1.154.743 2.693.743 4.37v3.96c0 1.19.494 1.713.959 2.353.162.228.198.499-.01.668-.519.433-1.442 1.24-1.952 1.693l-.638-.901zm5.09 2.043c-4.76 3.532-11.658 5.408-17.596 2.949A13.06 13.06 0 012.12 21c-2.167-1.636-.225-3.877 1.912-2.61 4.928 2.913 10.447 3.703 15.854 2.048 1.108-.33 2.451.699 1.348 1.4z"/></svg>
+                                <span>Prime</span>
+                            </button>
+                            <button class="tv-app-btn" id="tvAppSpotify" onclick="window.tvApp('spotify')" title="Launch Spotify TV">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="#1db954"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.49 17.3c-.2.32-.63.42-.95.22-2.73-1.67-6.17-2.05-10.22-1.12-.37.08-.73-.15-.81-.52-.08-.37.15-.73.52-.81 4.43-1.01 8.23-.58 11.29 1.29.31.2.42.63.22.95zm1.46-3.26c-.25.4-.78.53-1.18.28-3.13-1.92-7.9-2.48-11.59-1.36-.45.14-.92-.12-1.06-.57-.14-.45.12-.92.57-1.06 4.22-1.28 9.5-.66 13.14 1.58.4.24.53.77.28 1.18z"/></svg>
+                                <span>Spotify</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- CONNECT SECTION -->
+                    <div class="device-section" style="margin-top:8px;">
+                        <div class="device-section-header" style="margin-bottom:6px;">
+                            <div class="device-section-title-row">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                                <span class="device-section-label">CONNECT</span>
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <button class="device-mirror-btn" id="phoneMirrorBtn" onclick="window.mirrorPhone()" style="flex:1;margin:0;min-width:0;" title="Connect & Mirror Phone">
+                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                                <span>PHONE</span>
+                            </button>
+                            <button class="device-mirror-btn" id="tvMirrorBtn" onclick="window.tvMirror()" style="flex:1;margin:0;min-width:0;" title="Connect & Mirror TV">
+                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                                <span>TV</span>
+                            </button>
+                            <button class="open-controls-btn" id="openControlsBtn" onclick="window.openControls()" title="Reopen control panel">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- PHONE SECTION -->
+                    <div class="device-section" id="phoneSection" style="margin-top:8px;">
+                        <div class="device-section-header">
+                            <div class="device-section-title-row">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                                <span class="device-section-label">ANDROID PHONE</span>
+                            </div>
+                            <div class="device-status-badge" id="phoneStatusBadge">
+                                <span class="device-status-dot" id="phoneStatusDot"></span>
+                                <span id="phoneStatusText">DISCONNECTED</span>
+                            </div>
+                        </div>
+
+                        <div class="device-ip-row">
+                            <input type="text" id="phoneIpPcInput" class="device-ip-input" placeholder="Phone IP:port (e.g. 192.168.1.50:5555)" />
+                            <button class="device-connect-btn" id="phoneConnectBtn" onclick="window.connectPhone()" title="Connect to Phone">
+                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                                LINK
+                            </button>
+                        </div>
+
+                        <div class="device-ip-row device-task-row">
+                            <input type="text" id="phoneTaskInput" class="device-ip-input" placeholder="Do something on my phone... e.g. open YouTube & play jazz" />
+                            <button class="device-connect-btn" id="phoneTaskBtn" onclick="window.phoneDoTask()" title="JASVA sees the phone screen and does it">
+                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                                DO IT
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast Notifications Floating Container -->
+        <div id="toastContainer" class="toast-container"></div>
+    </div>
+
+    <!-- SYSTEM CONFIGURATION PANEL OVERLAY -->
+    <div class="settings-overlay" id="settingsOverlay">
+        <div class="settings-container">
+            <div class="settings-header pywebview-drag-region">
+                <span class="title">SYSTEM CONFIGURATION</span>
+                <span id="autoSaveStatus">SAVED</span>
+                <button class="close-btn" id="closeSettingsBtn">&times;</button>
+            </div>
+            <div class="settings-body scrollable">
+                <!-- Section 1: Voice Synthesis -->
+                <div class="settings-section">
+                    <div class="section-title">VOICE SYNTHESIS</div>
+                    <div class="setting-item">
+                        <label for="speechEngineSelect">SPEECH ENGINE</label>
+                        <select id="speechEngineSelect" class="hud-select">
+                            <option value="edge_tts">Edge Neural (Offline - Free)</option>
+                            <option value="elevenlabs">ElevenLabs (Premium - Cloud)</option>
+                        </select>
+                    </div>
+                    <div class="setting-item" id="edgeVoiceItem">
+                        <label for="voiceSelect">EDGE TTS VOICE</label>
+                        <select id="voiceSelect" class="hud-select">
+                            <option value="en-US-SteffanNeural">Steffan (US - Male)</option>
+                            <option value="en-US-AriaNeural">Aria (US - Female)</option>
+                            <option value="en-US-JennyNeural">Jenny (US - Female)</option>
+                            <option value="en-US-GuyNeural">Guy (US - Male)</option>
+                            <option value="en-US-ChristopherNeural">Christopher (US - Male)</option>
+                            <option value="en-US-EricNeural">Eric (US - Male)</option>
+                            <option value="en-US-MichelleNeural">Michelle (US - Female)</option>
+                            <option value="en-US-AnaNeural">Ana (US - Female)</option>
+                            <option value="en-GB-RyanNeural">Ryan (UK - Male)</option>
+                            <option value="en-GB-SoniaNeural">Sonia (UK - Female)</option>
+                            <option value="en-GB-LibbyNeural">Libby (UK - Female)</option>
+                            <option value="en-AU-WilliamNeural">William (AU - Male)</option>
+                            <option value="en-AU-NatashaNeural">Natasha (AU - Female)</option>
+                            <option value="en-IN-NeerjaNeural">Neerja (IN - Female)</option>
+                            <option value="en-IN-PrabhatNeural">Prabhat (IN - Male)</option>
+                        </select>
+                    </div>
+                    <div class="setting-item" id="elevenlabsVoiceItem">
+                        <label for="elevenlabsVoiceSelect">ELEVENLABS VOICE</label>
+                        <select id="elevenlabsVoiceSelect" class="hud-select">
+                            <option value="EXAVITQu4vr4xnSDxMaL">Sarah (Female - Mature)</option>
+                            <option value="IKne3meq5aSn9XLyUdCD">Charlie (Male - Energetic)</option>
+                            <option value="JBFqnCBsd6RMkjVDRZzb">George (Male - Storyteller)</option>
+                            <option value="hpp4J3VqNfWAUOO0d1Us">Bella (Female - Professional)</option>
+                            <option value="pNInz6obpgDQGcFmaJgB">Adam (Male - Firm)</option>
+                            <option value="nPczCjzI2devNBz1zQrb">Brian (Male - Deep)</option>
+                            <option value="custom">-- Custom Voice ID --</option>
+                        </select>
+                    </div>
+                    <div class="setting-item" id="elevenlabsCustomVoiceItem" style="display: none;">
+                        <label for="elevenlabsVoiceInput">CUSTOM VOICE ID</label>
+                        <input type="text" id="elevenlabsVoiceInput" class="hud-input" placeholder="Enter ElevenLabs Voice ID...">
+                    </div>
+                    <div class="setting-item">
+                        <label for="volumeSlider">VOICE VOLUME (<span id="volumeVal">75%</span>)</label>
+                        <input type="range" id="volumeSlider" class="hud-slider" min="0" max="1" step="0.05" value="0.75">
+                    </div>
+                    <div class="setting-item">
+                        <label for="speedSlider">SPEECH SPEED (<span id="speedVal">1.0x</span>)</label>
+                        <input type="range" id="speedSlider" class="hud-slider" min="0.8" max="1.5" step="0.05" value="1.0">
+                    </div>
+                </div>
+
+                <!-- Section 2: Conversational Engine Options -->
+                <div class="settings-section">
+                    <div class="section-title">CONVERSATIONAL ENGINE</div>
+                    <div class="setting-item flex-row">
+                        <label for="alwaysListenToggle">CONTINUOUS LISTENING (MIC ALWAYS ON)</label>
+                        <label class="hud-switch">
+                            <input type="checkbox" id="alwaysListenToggle">
+                            <span class="switch-slider"></span>
+                        </label>
+                    </div>
+                    <div class="setting-item flex-row">
+                        <label for="autostartToggle">AUTO START ON WINDOWS BOOT</label>
+                        <label class="hud-switch">
+                            <input type="checkbox" id="autostartToggle">
+                            <span class="switch-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Section 3: Conversational Engine Options -->
+                <div class="settings-section">
+                    <div class="section-title">CONVERSATIONAL ENGINE</div>
+                    <div class="setting-item flex-row">
+                        <label for="alwaysListenToggle">CONTINUOUS LISTENING (MIC ALWAYS ON)</label>
+                        <label class="hud-switch">
+                            <input type="checkbox" id="alwaysListenToggle">
+                            <span class="switch-slider"></span>
+                        </label>
+                    </div>
+                    <div class="setting-item flex-row">
+                        <label for="autostartToggle">AUTO START ON WINDOWS BOOT</label>
+                        <label class="hud-switch">
+                            <input type="checkbox" id="autostartToggle">
+                            <span class="switch-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Section 4: Visual Theme Options -->
+                <div class="settings-section">
+                    <div class="section-title">HUD VISUAL THEME</div>
+                    <div class="setting-item">
+                        <label for="themeSelect">INTERFACE THEME</label>
+                        <select id="themeSelect" class="hud-select" onchange="window.changeHudTheme(this.value)">
+                            <option value="default">Quantum Cyan (Default)</option>
+                            <option value="purple">Cyber Violet</option>
+                            <option value="green">Matrix Emerald</option>
+                            <option value="orange">Solar Amber</option>
+                            <option value="red">Blood Crimson</option>
+                            <option value="light">Crisp Light</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script assets -->
+    <script src="shared.js"></script>
+    <script src="chat.js"></script>
+    <script src="sphere.js"></script>
+    <script src="device.js"></script>
+
+</body>
+</html>

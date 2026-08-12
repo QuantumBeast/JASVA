@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JASVA Controls</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --accent-color: #00f2fe;
+            --accent-glow: rgba(0, 242, 254, 0.35);
+            --text-muted: #8ca3c5;
+            --bg-dark: #060c18;
+        }
+        body {
+            background: var(--bg-dark);
+            color: #fff;
+            font-family: 'Segoe UI', sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* Header */
+        .ctrl-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: rgba(0, 242, 254, 0.06);
+            border-bottom: 1px solid rgba(0, 242, 254, 0.15);
+            cursor: grab;
+            -webkit-app-region: drag;
+            flex-shrink: 0;
+        }
+        .ctrl-header:active { cursor: grabbing; }
+        .ctrl-header svg { flex-shrink: 0; }
+        .ctrl-title {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            color: var(--accent-color);
+        }
+        .ctrl-close {
+            margin-left: auto;
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 16px;
+            cursor: pointer;
+            padding: 0 4px;
+            -webkit-app-region: no-drag;
+        }
+        .ctrl-close:hover { color: #ff3b30; }
+
+        /* Controls Body */
+        #phoneControls, #tvControls {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        .ctrl-body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 10px;
+            min-height: 0;
+        }
+
+        /* Power Button */
+        .power-btn {
+            width: 100%;
+            height: 34px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            background: rgba(255, 59, 48, 0.12);
+            border: 1px solid rgba(255, 59, 48, 0.4);
+            border-radius: 10px;
+            color: #ff6b60;
+            cursor: pointer;
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            transition: all 0.15s ease;
+            -webkit-app-region: no-drag;
+        }
+        .power-btn:hover {
+            background: rgba(255, 59, 48, 0.2);
+            box-shadow: 0 0 10px rgba(255, 59, 48, 0.3);
+        }
+        .power-btn:active {
+            background: #ff3b30;
+            color: #000;
+            transform: scale(0.95);
+        }
+
+        /* Phone Controls */
+        .phone-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+        .phone-row {
+            display: flex;
+            gap: 6px;
+            justify-content: center;
+        }
+        .phone-row .ctrl-btn {
+            width: auto;
+            flex: 1;
+        }
+        .ctrl-btn {
+            width: 52px;
+            height: 50px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(0, 242, 254, 0.2);
+            border-radius: 10px;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 8px;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            transition: all 0.15s ease;
+            -webkit-app-region: no-drag;
+        }
+        .ctrl-btn:hover {
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+            box-shadow: 0 0 10px var(--accent-glow);
+        }
+        .ctrl-btn:active {
+            background: var(--accent-color);
+            color: #000;
+            transform: scale(0.92);
+        }
+
+        /* TV D-Pad */
+        .dpad {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+        }
+        .dpad-row {
+            display: flex;
+            gap: 3px;
+            align-items: center;
+        }
+        .dpad-btn {
+            width: 42px;
+            height: 42px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(0, 242, 254, 0.25);
+            border-radius: 50%;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.15s ease;
+            -webkit-app-region: no-drag;
+        }
+        .dpad-btn:hover {
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+        }
+        .dpad-btn:active {
+            background: var(--accent-color);
+            color: #000;
+            transform: scale(0.9);
+        }
+        .dpad-ok {
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 242, 254, 0.12);
+            border: 2px solid var(--accent-color);
+            border-radius: 50%;
+            color: var(--accent-color);
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            -webkit-app-region: no-drag;
+        }
+        .dpad-ok:hover {
+            background: rgba(0, 242, 254, 0.2);
+        }
+        .dpad-ok:active {
+            background: var(--accent-color);
+            color: #000;
+            transform: scale(0.9);
+        }
+
+        /* TV Buttons Grid */
+        .tv-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+            margin-top: 10px;
+        }
+        .ctrl-btn-sm {
+            width: 46px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(0, 242, 254, 0.2);
+            border-radius: 10px;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 9px;
+            font-weight: 700;
+            transition: all 0.15s ease;
+            -webkit-app-region: no-drag;
+        }
+        .ctrl-btn-sm:hover {
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+        }
+        .ctrl-btn-sm:active {
+            background: var(--accent-color);
+            color: #000;
+            transform: scale(0.9);
+        }
+    </style>
+</head>
+<body>
+    <!-- PHONE CONTROLS -->
+    <div id="phoneControls" style="display:none;">
+        <div class="ctrl-header pywebview-drag-region">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#00f2fe" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/></svg>
+            <span class="ctrl-title">PHONE</span>
+            <button class="ctrl-close" onclick="closeWindow()">&times;</button>
+        </div>
+        <div class="ctrl-body">
+            <button class="power-btn" onclick="send('phone keyevent 26', this)" title="Power">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/></svg>
+                POWER
+            </button>
+            <div class="tv-grid">
+                <button class="ctrl-btn-sm" onclick="send('phone keyevent 3', this)" title="Home">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                </button>
+                <button class="ctrl-btn-sm" onclick="send('phone keyevent 4', this)" title="Back">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+                </button>
+                <button class="ctrl-btn-sm" onclick="send('phone keyevent 82', this)" title="Menu">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+                </button>
+                <button class="ctrl-btn-sm" onclick="send('phone keyevent 164', this)" title="Mute">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+                </button>
+                <button class="ctrl-btn-sm" onclick="send('phone keyevent 24', this)" title="Volume Up">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                </button>
+                <button class="ctrl-btn-sm" onclick="send('phone keyevent 25', this)" title="Volume Down">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TV CONTROLS -->
+    <div id="tvControls" style="display:none;">
+        <div class="ctrl-header pywebview-drag-region">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#00f2fe" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            <span class="ctrl-title">TV</span>
+            <button class="ctrl-close" onclick="closeWindow()">&times;</button>
+        </div>
+        <div class="ctrl-body">
+            <button class="power-btn" onclick="send('tv power', this)" title="Power">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/></svg>
+                POWER
+            </button>
+            <div class="dpad">
+                <button class="dpad-btn" onclick="send('tv up', this)" title="Up">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="3"><polyline points="18 15 12 9 6 15"/></svg>
+                </button>
+                <div class="dpad-row">
+                    <button class="dpad-btn" onclick="send('tv left', this)" title="Left">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="3"><polyline points="15 18 9 12 15 6"/></svg>
+                    </button>
+                    <button class="dpad-ok" onclick="send('tv select', this)" title="OK">OK</button>
+                    <button class="dpad-btn" onclick="send('tv right', this)" title="Right">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="3"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+                </div>
+                <button class="dpad-btn" onclick="send('tv down', this)" title="Down">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+            </div>
+            <div class="tv-grid">
+                <button class="ctrl-btn-sm" onclick="send('tv home', this)" title="Home">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                </button>
+                <button class="ctrl-btn-sm" onclick="send('tv back', this)" title="Back">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/><line x1="20" y1="12" x2="9" y2="12"/></svg>
+                </button>
+                <button class="ctrl-btn-sm" onclick="send('tv button menu', this)" title="Menu">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+                </button>
+                <button class="ctrl-btn-sm" onclick="send('tv button mute', this)" title="Mute">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+                </button>
+                <button class="ctrl-btn-sm" onclick="send('tv volume_up', this)" title="Volume Up">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                </button>
+                <button class="ctrl-btn-sm" onclick="send('tv volume_down', this)" title="Volume Down">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let apiReady = false;
+
+        const DEVICE_KEY_MAP = {
+            phone: {
+                '3': 'home', '4': 'back', '187': 'recents', '26': 'power',
+                '24': 'volume_up', '25': 'volume_down', '164': 'mute'
+            },
+            tv: {
+                'up': 'up', 'down': 'down', 'left': 'left', 'right': 'right',
+                'select': 'select', 'ok': 'select', 'home': 'home', 'back': 'back',
+                'mute': 'mute', 'volume_up': 'volume_up', 'volume_down': 'volume_down',
+                'menu': 'menu'
+            }
+        };
+
+        async function send(cmd, btn) {
+            if (btn) {
+                btn.style.background = 'var(--accent-color)';
+                btn.style.color = '#000';
+                setTimeout(() => { btn.style.background = ''; btn.style.color = ''; }, 150);
+            }
+            if (!apiReady || !window.pywebview || !window.pywebview.api) return;
+
+            const device = getDevice();
+            const parts = cmd.split(' ');
+            const key = parts[parts.length - 1];
+
+            try {
+                await window.pywebview.api.quick_button(device, key);
+            } catch(e) {
+                console.error('Button error:', e);
+            }
+        }
+
+        function closeWindow() {
+            if (window.pywebview && window.pywebview.api) {
+                window.pywebview.api.hide_ctrl_window(getDevice());
+            }
+        }
+
+        function getDevice() {
+            const params = new URLSearchParams(window.location.search);
+            return params.get('device');
+        }
+
+        function waitForApi() {
+            return new Promise((resolve) => {
+                if (window.pywebview && window.pywebview.api) {
+                    resolve();
+                    return;
+                }
+                const interval = setInterval(() => {
+                    if (window.pywebview && window.pywebview.api) {
+                        clearInterval(interval);
+                        resolve();
+                    }
+                }, 50);
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            await waitForApi();
+            apiReady = true;
+            const device = getDevice();
+            document.getElementById('phoneControls').style.display = (device === 'phone') ? 'flex' : 'none';
+            document.getElementById('tvControls').style.display = (device === 'tv') ? 'flex' : 'none';
+        });
+    </script>
+</body>
+</html>

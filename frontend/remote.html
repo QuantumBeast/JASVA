@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>JASVA Quantum Remote Link</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-color: #05080c;
+            --surface-color: rgba(13, 20, 30, 0.65);
+            --border-color: rgba(0, 242, 254, 0.15);
+            --accent-cyan: #00f2fe;
+            --accent-blue: #4facfe;
+            --accent-magenta: #f35588;
+            --text-primary: #f0f4f8;
+            --text-secondary: #8a9ba8;
+            --glow-color: rgba(0, 242, 254, 0.4);
+            --glass-blur: blur(12px);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(0, 242, 254, 0.05) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(79, 172, 254, 0.05) 0%, transparent 40%);
+        }
+
+        /* ─── Navigation Header ─── */
+        header {
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(8, 12, 19, 0.85);
+            backdrop-filter: var(--glass-blur);
+            z-index: 10;
+        }
+
+        .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo-dot {
+            width: 10px;
+            height: 10px;
+            background-color: var(--accent-cyan);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--accent-cyan);
+            animation: pulse-core 2s infinite;
+        }
+
+        h1 {
+            font-size: 1.1rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .status-badge {
+            font-size: 0.75rem;
+            padding: 4px 10px;
+            border-radius: 12px;
+            background: rgba(0, 242, 254, 0.1);
+            border: 1px solid rgba(0, 242, 254, 0.2);
+            color: var(--accent-cyan);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            background-color: var(--accent-cyan);
+            border-radius: 50%;
+        }
+
+        /* ─── Tabs System ─── */
+        .tab-bar {
+            display: flex;
+            background: rgba(8, 12, 19, 0.5);
+            border-bottom: 1px solid var(--border-color);
+            z-index: 10;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 14px;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .tab-btn.active {
+            color: var(--accent-cyan);
+        }
+
+        .tab-btn.active::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 20%;
+            width: 60%;
+            height: 2px;
+            background: linear-gradient(90deg, var(--accent-cyan), var(--accent-blue));
+            box-shadow: 0 0 8px var(--accent-cyan);
+        }
+
+        /* ─── Content Panels ─── */
+        .panel-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .panel {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(15px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow-y: auto;
+        }
+
+        .panel.active {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(0);
+        }
+
+        /* ─── PANEL 1: CHATCORE ─── */
+        .chat-output {
+            flex: 1;
+            background: rgba(4, 7, 12, 0.4);
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            padding: 16px;
+            overflow-y: auto;
+            margin-bottom: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .message {
+            max-width: 85%;
+            padding: 12px 16px;
+            border-radius: 14px;
+            font-size: 0.95rem;
+            line-height: 1.4;
+            animation: fade-in 0.25s ease-out;
+        }
+
+        .message.user {
+            align-self: flex-end;
+            background: linear-gradient(135deg, rgba(0, 242, 254, 0.15), rgba(79, 172, 254, 0.15));
+            border: 1px solid rgba(0, 242, 254, 0.3);
+            color: var(--accent-cyan);
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.ai {
+            align-self: flex-start;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: var(--text-primary);
+            border-bottom-left-radius: 4px;
+        }
+
+        .chat-input-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .text-input-wrapper {
+            flex: 1;
+            position: relative;
+        }
+
+        .text-input {
+            width: 100%;
+            background: rgba(13, 20, 30, 0.8);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            padding: 14px 20px;
+            color: var(--text-primary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.95rem;
+            outline: none;
+            transition: all 0.3s;
+        }
+
+        .text-input:focus {
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 10px rgba(0, 242, 254, 0.2);
+        }
+
+        .mic-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            border: none;
+            color: #030508;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 0 15px rgba(0, 242, 254, 0.4);
+            transition: all 0.3s;
+        }
+
+        .mic-btn:active {
+            transform: scale(0.9);
+            box-shadow: 0 0 25px rgba(0, 242, 254, 0.7);
+        }
+
+        .mic-btn.listening {
+            animation: pulse-mic 1.5s infinite;
+            background: linear-gradient(135deg, var(--accent-magenta), #f857a6);
+            box-shadow: 0 0 20px rgba(243, 85, 136, 0.5);
+        }
+
+        /* ─── PANEL 2: TRACKPAD ─── */
+        .trackpad-card {
+            flex: 1;
+            background: rgba(6, 10, 17, 0.7);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .trackpad-area {
+            flex: 1;
+            background: radial-gradient(circle at center, rgba(0, 242, 254, 0.02) 0%, transparent 80%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            touch-action: none;
+        }
+
+        .trackpad-grid {
+            position: absolute;
+            width: 80%;
+            height: 80%;
+            border: 1px dashed rgba(0, 242, 254, 0.08);
+            border-radius: 12px;
+            pointer-events: none;
+        }
+
+        .trackpad-label {
+            font-size: 0.85rem;
+            color: rgba(0, 242, 254, 0.4);
+            font-weight: 500;
+            letter-spacing: 2px;
+            pointer-events: none;
+        }
+
+        .trackpad-buttons {
+            display: flex;
+            height: 70px;
+            border-top: 1px solid var(--border-color);
+            background: rgba(13, 20, 30, 0.8);
+        }
+
+        .click-btn {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-family: 'Outfit', sans-serif;
+            font-weight: 600;
+            font-size: 0.9rem;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .click-btn:active {
+            background: rgba(0, 242, 254, 0.1);
+            color: var(--accent-cyan);
+        }
+
+        .click-btn:first-child {
+            border-right: 1px solid var(--border-color);
+        }
+
+        .kb-tray {
+            margin-top: 12px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .kb-input-field {
+            flex: 1;
+            background: rgba(13, 20, 30, 0.7);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 10px 15px;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            outline: none;
+        }
+
+        .media-controller {
+            display: flex;
+            justify-content: space-around;
+            padding: 16px;
+            background: rgba(8, 12, 19, 0.6);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            margin-top: 14px;
+        }
+
+        .ctrl-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .ctrl-btn:active {
+            background: rgba(0, 242, 254, 0.15);
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+        }
+
+        /* ─── PANEL 3: TV REMOTE ─── */
+        .tv-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            height: 100%;
+        }
+
+        .ip-setup-card {
+            background: rgba(13, 20, 30, 0.7);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 16px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .ip-input {
+            flex: 1;
+            background: rgba(5, 8, 12, 0.6);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 8px 12px;
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            outline: none;
+        }
+
+        .ip-btn {
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            border: none;
+            color: #000;
+            padding: 8px 16px;
+            font-family: 'Outfit', sans-serif;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        /* Cyber remote layout */
+        .remote-pad-card {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        /* Directional D-Pad */
+        .dpad-container {
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            background: rgba(13, 20, 30, 0.85);
+            border: 2px solid rgba(0, 242, 254, 0.25);
+            position: relative;
+            box-shadow: 0 0 25px rgba(0, 0, 0, 0.5), inset 0 0 15px rgba(0, 242, 254, 0.1);
+        }
+
+        .dpad-btn {
+            position: absolute;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .dpad-btn:active {
+            color: var(--accent-cyan);
+            text-shadow: 0 0 8px var(--accent-cyan);
+        }
+
+        .dpad-up { top: 10px; left: 75px; width: 50px; height: 40px; }
+        .dpad-down { bottom: 10px; left: 75px; width: 50px; height: 40px; }
+        .dpad-left { top: 75px; left: 10px; width: 40px; height: 50px; }
+        .dpad-right { top: 75px; right: 10px; width: 40px; height: 50px; }
+
+        .dpad-center {
+            position: absolute;
+            top: 60px;
+            left: 60px;
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, rgba(0, 242, 254, 0.1), rgba(79, 172, 254, 0.1));
+            border: 2px solid var(--accent-cyan);
+            color: var(--text-primary);
+            font-weight: 700;
+            font-size: 0.9rem;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 15px rgba(0, 242, 254, 0.25);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .dpad-center:active {
+            transform: scale(0.95);
+            box-shadow: 0 0 25px rgba(0, 242, 254, 0.6);
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            color: #030508;
+        }
+
+        /* Remote Action buttons row */
+        .tv-action-row {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            width: 100%;
+            margin-top: 15px;
+        }
+
+        .tv-btn {
+            width: 55px;
+            height: 55px;
+            border-radius: 50%;
+            background: rgba(13, 20, 30, 0.8);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .tv-btn:active {
+            background: rgba(0, 242, 254, 0.15);
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+        }
+
+        .tv-btn.power {
+            border-color: rgba(243, 85, 136, 0.4);
+            color: var(--accent-magenta);
+        }
+        .tv-btn.power:active {
+            background: rgba(243, 85, 136, 0.2);
+            border-color: var(--accent-magenta);
+            color: var(--accent-magenta);
+            box-shadow: 0 0 10px rgba(243, 85, 136, 0.4);
+        }
+
+        /* Apps Grid Launcher */
+        .tv-apps-container {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            padding: 16px;
+            background: rgba(8, 12, 19, 0.6);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            margin-top: 10px;
+        }
+
+        .app-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .app-card:active {
+            background: rgba(0, 242, 254, 0.1);
+            border-color: var(--accent-cyan);
+            transform: scale(0.95);
+        }
+
+        .app-icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 4px;
+        }
+
+        .app-name {
+            font-size: 0.65rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        /* Animations */
+        @keyframes pulse-core {
+            0% { transform: scale(1); box-shadow: 0 0 8px var(--accent-cyan); }
+            50% { transform: scale(1.2); box-shadow: 0 0 16px var(--accent-cyan); }
+            100% { transform: scale(1); box-shadow: 0 0 8px var(--accent-cyan); }
+        }
+
+        @keyframes pulse-mic {
+            0% { box-shadow: 0 0 15px rgba(243, 85, 136, 0.4); }
+            50% { box-shadow: 0 0 25px rgba(243, 85, 136, 0.8); }
+            100% { box-shadow: 0 0 15px rgba(243, 85, 136, 0.4); }
+        }
+
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Scrollbar styles */
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(0, 242, 254, 0.2);
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ─── Header status bar ─── -->
+    <header>
+        <div class="logo-section">
+            <div class="logo-dot"></div>
+            <h1>JASVA REMOTE LINK</h1>
+        </div>
+        <div class="status-badge" id="connStatus">
+            <div class="status-dot"></div>
+            <span>CONNECTED</span>
+        </div>
+    </header>
+
+    <!-- ─── Tab controls ─── -->
+    <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchTab('chat-panel')">CHAT CORE</button>
+        <button class="tab-btn" onclick="switchTab('trackpad-panel')">PC TRACKPAD</button>
+        <button class="tab-btn" onclick="switchTab('tv-panel')">TV REMOTE</button>
+    </div>
+
+    <!-- ─── Content panel container ─── -->
+    <div class="panel-container">
+        
+        <!-- ─── PANEL 1: CHATCORE ─── -->
+        <div id="chat-panel" class="panel active">
+            <div class="chat-output" id="chatOutput">
+                <div class="message ai">Holographic link established. State your query, sir.</div>
+            </div>
+            
+            <div class="chat-input-row">
+                <div class="text-input-wrapper">
+                    <input type="text" id="chatInput" class="text-input" placeholder="Transmit command..." onkeydown="handleInputKey(event)">
+                </div>
+                <button id="micBtn" class="mic-btn" onclick="toggleVoiceDictation()">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                        <line x1="12" y1="19" x2="12" y2="23"></line>
+                        <line x1="8" y1="23" x2="16" y2="23"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- ─── PANEL 2: TRACKPAD ─── -->
+        <div id="trackpad-panel" class="panel">
+            <div class="trackpad-card">
+                <div class="trackpad-area" id="trackpadArea">
+                    <div class="trackpad-grid"></div>
+                    <div class="trackpad-label">TOUCHPAD</div>
+                </div>
+                <div class="trackpad-buttons">
+                    <button class="click-btn" onclick="sendMouseClick('left')">LEFT CLICK</button>
+                    <button class="click-btn" onclick="sendMouseClick('right')">RIGHT CLICK</button>
+                </div>
+            </div>
+            
+            <div class="kb-tray">
+                <input type="text" id="keyboardInput" class="kb-input-field" placeholder="Virtual Keyboard typing..." oninput="handleKeyboardInput(event)">
+                <button class="ctrl-btn" onclick="sendKeyboardEvent('backspace')" style="width: 50px; border-radius: 10px;">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"></path>
+                        <line x1="18" y1="9" x2="12" y2="15"></line>
+                        <line x1="12" y1="9" x2="18" y2="15"></line>
+                    </svg>
+                </button>
+                <button class="ctrl-btn" onclick="sendKeyboardEvent('enter')" style="width: 50px; border-radius: 10px;">
+                    <span style="font-size: 0.75rem; font-weight: 700;">ENTER</span>
+                </button>
+            </div>
+
+            <!-- Media Keys -->
+            <div class="media-controller">
+                <button class="ctrl-btn" onclick="sendKeyboardEvent('left')" title="Arrow Left">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                </button>
+                <button class="ctrl-btn" onclick="sendKeyboardEvent('up')" title="Arrow Up">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                </button>
+                <button class="ctrl-btn" onclick="sendKeyboardEvent('down')" title="Arrow Down">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </button>
+                <button class="ctrl-btn" onclick="sendKeyboardEvent('right')" title="Arrow Right">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </button>
+                <button class="ctrl-btn" onclick="sendKeyboardEvent('space')" title="Play/Pause Spacer">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- ─── PANEL 3: TV REMOTE ─── -->
+        <div id="tv-panel" class="panel">
+            <div class="tv-wrapper">
+                
+                <!-- TV Network Setup IP -->
+                <div class="ip-setup-card">
+                    <input type="text" id="tvIpInput" class="ip-input" placeholder="Android TV IP (e.g. 192.168.1.100)">
+                    <button class="ip-btn" onclick="updateTvIp()">BIND IP</button>
+                </div>
+
+                <!-- TV remote layout -->
+                <div class="remote-pad-card">
+                    <div class="dpad-container">
+                        <button class="dpad-btn dpad-up" onclick="sendTvButton('up')">
+                            <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                        </button>
+                        <button class="dpad-btn dpad-down" onclick="sendTvButton('down')">
+                            <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </button>
+                        <button class="dpad-btn dpad-left" onclick="sendTvButton('left')">
+                            <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                        </button>
+                        <button class="dpad-btn dpad-right" onclick="sendTvButton('right')">
+                            <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                        </button>
+                        <button class="dpad-center" onclick="sendTvButton('select')">SELECT</button>
+                    </div>
+
+                    <!-- TV buttons grid row -->
+                    <div class="tv-action-row">
+                        <button class="tv-btn power" onclick="sendTvButton('power')">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"></path></svg>
+                            <span>POWER</span>
+                        </button>
+                        <button class="tv-btn" onclick="sendTvButton('back')">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="12 19 5 12 12 5"></polyline><line x1="19" y1="12" x2="5" y2="12"></line></svg>
+                            <span>BACK</span>
+                        </button>
+                        <button class="tv-btn" onclick="sendTvButton('home')">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                            <span>HOME</span>
+                        </button>
+                        <button class="tv-btn" onclick="sendTvButton('volume_up')">
+                            <span style="font-size: 1.1rem; font-weight: 700;">V+</span>
+                            <span>VOL +</span>
+                        </button>
+                        <button class="tv-btn" onclick="sendTvButton('volume_down')">
+                            <span style="font-size: 1.1rem; font-weight: 700;">V-</span>
+                            <span>VOL -</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- TV apps quick launcher -->
+                <div class="tv-apps-container">
+                    <div class="app-card" onclick="launchTvApp('youtube')">
+                        <svg class="app-icon" viewBox="0 0 24 24" fill="#ff0000"><path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.11C19.517 3.545 12 3.545 12 3.545s-7.516 0-9.387.507A3.002 3.002 0 0 0 .503 6.163C0 8.037 0 12 0 12s0 3.963.502 5.837a3.002 3.002 0 0 0 2.111 2.11C4.483 20.455 12 20.455 12 20.455s7.517 0 9.387-.508a3.003 3.003 0 0 0 2.11-2.11c.501-1.874.501-5.837.501-5.837s0-3.963-.501-5.837zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                        <span class="app-name">YouTube</span>
+                    </div>
+                    <div class="app-card" onclick="launchTvApp('netflix')">
+                        <span style="color: #e50914; font-weight: 900; font-size: 1.3rem; line-height: 1;">N</span>
+                        <span class="app-name">Netflix</span>
+                    </div>
+                    <div class="app-card" onclick="launchTvApp('prime video')">
+                        <span style="color: #00a8e1; font-weight: 800; font-size: 0.95rem;">prime</span>
+                        <span class="app-name">Prime</span>
+                    </div>
+                    <div class="app-card" onclick="launchTvApp('spotify')">
+                        <svg class="app-icon" viewBox="0 0 24 24" fill="#1db954"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.49 17.3c-.2.32-.63.42-.95.22-2.73-1.67-6.17-2.05-10.22-1.12-.37.08-.73-.15-.81-.52-.08-.37.15-.73.52-.81 4.43-1.01 8.23-.58 11.29 1.29.31.2.42.63.22.95zm1.46-3.26c-.25.4-.78.53-1.18.28-3.13-1.92-7.9-2.48-11.59-1.36-.45.14-.92-.12-1.06-.57-.14-.45.12-.92.57-1.06 4.22-1.28 9.5-.66 13.14 1.58.4.24.53.77.28 1.18.04.01.04.01 0 0zm.11-3.37C15.53 8.5 9.7 8.3 6.32 9.32c-.54.16-1.1-.15-1.27-.69-.16-.54.15-1.1.69-1.27 3.89-1.18 10.33-.94 14.44 1.5.49.29.65.92.36 1.41-.29.49-.92.65-1.41.36h-.09z"/></svg>
+                        <span class="app-name">Spotify</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Script loading -->
+    <script src="remote.js"></script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+# ─── Secrets ───────────────────────────────────────────────
+# API keys (Gemini, Groq, Puter, ElevenLabs, etc.)
+backend/.env
+
+# ─── Runtime data (personal memory, config, logs) ─────────
+backend/databases/
+backend/logs/
+phone_screenshots/
+
+# ─── Python ────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+*.manifest
+*.spec.bak
+
+# ─── Virtual environments ──────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ─── Editor / OS ───────────────────────────────────────────
+.freebuff/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
