@@ -62,8 +62,7 @@ JASVA.spec            PyInstaller build spec
 
 ## 🚀 Getting Started
 
-> **Platform:** Windows (uses `winreg`, `ctypes.windll`, PowerShell, and ADB).
-> **Python:** 3.10+ (no virtual environment — see [Project Rules](#project-rules)).
+> **Windows only** · Python 3.10+ · no virtual environments (see [Project Rules](#project-rules))
 
 ### 1. Install dependencies
 
@@ -73,7 +72,7 @@ pip install -r requirements.txt
 
 ### 2. Add API keys
 
-Open the **Settings** panel inside the app, or create `backend/.env`:
+Create `backend/.env` (git-ignored), or set them in the **Settings** panel:
 
 ```env
 GEMINI_API_KEY=...
@@ -82,22 +81,15 @@ PUTER_API_KEY=...
 ELEVENLABS_API_KEY=...
 ```
 
-API keys are never written to `config.json` — they live in the Windows
-credential manager with a `.env` fallback, and `.env` is git-ignored.
-
 ### 3. Run
 
 ```bash
-python app.pyw          # or pythonw app.pyw to run without a console
-python app.pyw --dev    # enable frontend hot-reload
-python app.pyw --autostart
+python app.pyw    # pythonw app.pyw runs without a console
 ```
 
 ### 4. Connect devices (optional)
 
-- **Android phone / TV:** enable ADB over Wi-Fi on the device, then say
-  `phone connect <ip:port>` / `tv connect <ip>` (or set the IPs in Settings).
-  Saved IPs auto-connect on startup.
+Enable ADB over Wi-Fi, then `phone connect <ip:port>` / `tv connect <ip>` — saved IPs auto-connect on startup.
 
 ## 🗣 Example Commands
 
