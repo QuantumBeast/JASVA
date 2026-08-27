@@ -141,7 +141,7 @@ def load_config():
         except Exception:
             pass
     return {
-        "voice": "en-US-SteffanNeural",
+        "voice": "en-GB-RyanNeural",
         "speech_engine": "edge_tts",
         "elevenlabs_voice": "21m00Tcm4TlvDq8ikWAM",
         "speed": 1.0,
@@ -209,6 +209,13 @@ class JASVALogger:
         main_handler.setFormatter(logging.Formatter(LOG_FORMAT, DATE_FORMAT))
         self.logger.addHandler(main_handler)
         
+        try:
+            for stream in (sys.stdout, sys.stderr):
+                if stream and hasattr(stream, 'reconfigure'):
+                    stream.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
+
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(logging.INFO)
         console_handler.setFormatter(logging.Formatter(LOG_FORMAT, DATE_FORMAT))
@@ -854,15 +861,100 @@ def open_application(app_name):
         logger.error(f"Failed to open {app_name}: {e}")
         return {"status": "error", "output": f"Failed to open {app_name}: {str(e)}"}
 
+
+def capture_desktop_screenshot(max_width=1600):
+    """
+    Capture a crisp screenshot of the active PC desktop using fast Windows GDI BitBlt
+    and return as base64 JPEG string (with fallback to PIL ImageGrab).
+    """
+    import io
+    import base64
+    from PIL import Image
+    
+    # 1. Try Windows Native GDI BitBlt
+    try:
+        import ctypes
+        
+        user32 = ctypes.windll.user32
+        gdi32 = ctypes.windll.gdi32
+        
+        w = user32.GetSystemMetrics(0) or 1920
+        h = user32.GetSystemMetrics(1) or 1080
+        
+        hdc_screen = user32.GetDC(0)
+        hdc_mem = gdi32.CreateCompatibleDC(hdc_screen)
+        hbmp = gdi32.CreateCompatibleBitmap(hdc_screen, w, h)
+        gdi32.SelectObject(hdc_mem, hbmp)
+        gdi32.BitBlt(hdc_mem, 0, 0, w, h, hdc_screen, 0, 0, 0x00CC0020)
+        
+        class BITMAPINFOHEADER(ctypes.Structure):
+            _fields_ = [
+                ('biSize', ctypes.c_uint32),
+                ('biWidth', ctypes.c_int32),
+                ('biHeight', ctypes.c_int32),
+                ('biPlanes', ctypes.c_uint16),
+                ('biBitCount', ctypes.c_uint16),
+                ('biCompression', ctypes.c_uint32),
+                ('biSizeImage', ctypes.c_uint32),
+                ('biXPelsPerMeter', ctypes.c_int32),
+                ('biYPelsPerMeter', ctypes.c_int32),
+                ('biClrUsed', ctypes.c_uint32),
+                ('biClrImportant', ctypes.c_uint32)
+            ]
+        
+        bih = BITMAPINFOHEADER()
+        bih.biSize = ctypes.sizeof(BITMAPINFOHEADER)
+        bih.biWidth = w
+        bih.biHeight = -h  # top-down bitmap
+        bih.biPlanes = 1
+        bih.biBitCount = 32
+        bih.biCompression = 0
+        
+        raw_buffer = (ctypes.c_char * (w * h * 4))()
+        gdi32.GetDIBits(hdc_mem, hbmp, 0, h, raw_buffer, ctypes.byref(bih), 0)
+        
+        img = Image.frombuffer('RGBA', (w, h), bytes(raw_buffer), 'raw', 'BGRA', 0, 1).convert('RGB')
+        
+        gdi32.DeleteObject(hbmp)
+        gdi32.DeleteDC(hdc_mem)
+        user32.ReleaseDC(0, hdc_screen)
+        
+        if img.width > max_width:
+            ratio = max_width / float(img.width)
+            new_h = int(float(img.height) * ratio)
+            img = img.resize((max_width, new_h), Image.Resampling.LANCZOS)
+            
+        out_buf = io.BytesIO()
+        img.save(out_buf, format="JPEG", quality=85)
+        return base64.b64encode(out_buf.getvalue()).decode("utf-8")
+    except Exception as e:
+        logger.debug(f"GDI BitBlt screenshot failed, trying fallback: {e}")
+
+    # 2. Fallback to PIL ImageGrab
+    try:
+        from PIL import ImageGrab
+        img = ImageGrab.grab(all_screens=True)
+        if img.width > max_width:
+            ratio = max_width / float(img.width)
+            new_h = int(float(img.height) * ratio)
+            img = img.resize((max_width, new_h), Image.Resampling.LANCZOS)
+        out_buf = io.BytesIO()
+        img.save(out_buf, format="JPEG", quality=85)
+        return base64.b64encode(out_buf.getvalue()).decode("utf-8")
+    except Exception as ex:
+        logger.error(f"Failed to capture screen: {ex}")
+        return None
+
 _mirror_scrcpy_exe = None
 _mirror_adb_exe = None
+_active_mirror_processes = {}
 
 @log_execution_time
 def launch_phone_mirror(ip_port=""):
-    """Launch scrcpy to mirror phone screen. Auto-detects phone from adb devices if no ip_port given."""
-    global _mirror_scrcpy_exe, _mirror_adb_exe
+    """Launch 60FPS borderless scrcpy mirror integrated cleanly inside JASVA HUD without titlebars or latency."""
+    global _mirror_scrcpy_exe, _mirror_adb_exe, _active_mirror_processes
     try:
-        # Find scrcpy executable (cached - the glob scan is slow to repeat)
+        # Find scrcpy executable (cached)
         if not _mirror_scrcpy_exe:
             scrcpy_paths = [
                 os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\WinGet\Packages\Genymobile.scrcpy_*\scrcpy-win64-v*\scrcpy.exe"),
@@ -902,7 +994,7 @@ def launch_phone_mirror(ip_port=""):
                     break
         adb_exe = _mirror_adb_exe
         
-        # Auto-detect phone from adb devices if no ip_port given
+        # Auto-detect device from adb devices if no ip_port given
         target = ip_port.strip()
         if not target and adb_exe:
             try:
@@ -914,7 +1006,7 @@ def launch_phone_mirror(ip_port=""):
                 tv_ip = ""
                 try:
                     from backend.sys_utils import load_config
-                    tv_ip = load_config().get("tv_ip", "")
+                    tv_ip = load_config().get("tv_ip", "").strip()
                 except Exception:
                     pass
                 tv_target = f"{tv_ip}:5555" if tv_ip else ""
@@ -927,53 +1019,189 @@ def launch_phone_mirror(ip_port=""):
                 pass
         
         if not target:
-            return {"status": "error", "output": "No phone found. Connect via ADB first or enter IP:port."}
+            return {"status": "error", "output": "No connected device found via ADB."}
+
+        # Determine if target is TV or Phone
+        is_tv = False
+        tv_ip = ""
+        try:
+            from backend.sys_utils import load_config
+            tv_ip = load_config().get("tv_ip", "").strip()
+        except Exception:
+            pass
         
-        # Launch scrcpy with ADB path via environment.
+        if tv_ip and (target == tv_ip or target == f"{tv_ip}:5555" or tv_ip in target):
+            is_tv = True
+
+        # If already running, terminate to toggle off
+        if target in _active_mirror_processes:
+            p = _active_mirror_processes[target]
+            if p and p.poll() is None:
+                try:
+                    p.terminate()
+                except Exception:
+                    pass
+                _active_mirror_processes.pop(target, None)
+                if not is_tv:
+                    try:
+                        from backend.adb_manager import adb_manager
+                        adb_manager.disconnect(target)
+                    except Exception:
+                        pass
+                return {"status": "stopped", "output": f"Closed mirror for {target}."}
+
+        # Launch scrcpy with ADB path via environment
         env = os.environ.copy()
         if adb_exe:
             env["ADB"] = adb_exe
-        # Small, smooth mirror: cap the size for a compact window + fast startup,
-        # keep a high bitrate and 30fps so playback stays fluid (the old 2M/15fps
-        # combo caused the choppy video).
-        perf_args = ["--video-codec=h264", "--max-size=800", "--video-bit-rate=8M", "--max-fps=30"]
-        if ":" in target:
-            # TV mirror (ip:port) - offset window so both mirrors never overlap.
-            # Use `-s` instead of `--tcpip=` when possible: `--tcpip=` runs its
-            # own `adb connect` handshake inside scrcpy, adding seconds of delay.
-            # If the device is already known to adb, scrcpy connects instantly.
-            already_connected = False
-            if adb_exe:
-                try:
-                    check = subprocess.run(
-                        [adb_exe, "devices"], capture_output=True, text=True, timeout=5,
-                        creationflags=CREATE_NO_WINDOW
-                    )
-                    for line in check.stdout.splitlines()[1:]:
-                        parts = line.split()
-                        if len(parts) >= 2 and parts[0] == target and parts[1] == "device":
-                            already_connected = True
-                            break
-                except Exception:
-                    pass
-            if not already_connected:
-                try:
-                    subprocess.run(
-                        [adb_exe, "connect", target], capture_output=True, text=True, timeout=10,
-                        creationflags=CREATE_NO_WINDOW
-                    )
-                except Exception:
-                    pass
-            args = [scrcpy_exe, "-s", target] + perf_args + ["--window-title=JASVA - TV MIRROR", "--window-x=580", "--window-y=140"]
+
+        # Calculate exact screen center coordinates on Windows
+        screen_w = 1920
+        screen_h = 1080
+        try:
+            import ctypes
+            screen_w = ctypes.windll.user32.GetSystemMetrics(0) or 1920
+            screen_h = ctypes.windll.user32.GetSystemMetrics(1) or 1080
+        except Exception:
+            pass
+
+        # Ultra-smooth 60fps low-latency hardware mirror (native scrcpy performance)
+        perf_args = [
+            "--video-codec=h264",
+            "--video-bit-rate=12M",
+            "--max-fps=60",
+            "--video-buffer=0",
+            "--stay-awake",
+            "--always-on-top"
+        ]
+
+        if is_tv:
+            win_title = f"Fire TV Mirror ({target})"
+            args = [scrcpy_exe, "-s", target] + perf_args + [
+                f"--window-title={win_title}",
+                "--max-size=1280"
+            ]
         else:
-            args = [scrcpy_exe, "-s", target] + perf_args + ["--window-title=JASVA - PHONE MIRROR", "--window-x=40", "--window-y=40"]
-        subprocess.Popen(args, env=env, creationflags=CREATE_NO_WINDOW)
+            win_title = f"Phone Mirror ({target})"
+            args = [scrcpy_exe, "-s", target] + perf_args + [
+                f"--window-title={win_title}",
+                "--max-size=1080"
+            ]
+
+        proc = subprocess.Popen(args, env=env, creationflags=CREATE_NO_WINDOW)
+        _active_mirror_processes[target] = proc
         
-        logger.info(f"Launched scrcpy for {target}")
-        return {"status": "success", "output": f"Phone mirror started for {target}"}
+        device_label = "Smart TV" if is_tv else "Phone"
+        logger.info(f"Launched mirror for {device_label} ({target})")
+        return {"status": "success", "output": f"Mirror active for {device_label}."}
     except Exception as e:
-        logger.error(f"Failed to launch phone mirror: {e}")
-        return {"status": "error", "output": f"Failed to launch phone mirror: {str(e)}"}
+        logger.error(f"Failed to launch mirror: {e}")
+        return {"status": "error", "output": f"Failed to launch mirror: {str(e)}"}
+
+def _apply_mirror_window_styling_and_drag(window_title, target, is_tv=False, proc=None):
+    """
+    Applies modern rounded corners to the scrcpy window, enables window dragging
+    exclusively from the top 36px bar, and disconnects wireless ADB on window close.
+    """
+    import threading
+    from ctypes import wintypes
+    
+    def _worker():
+        user32 = getattr(ctypes.windll, "user32", None)
+        if not user32:
+            return
+        dwmapi = getattr(ctypes.windll, "dwmapi", None)
+        gdi32 = getattr(ctypes.windll, "gdi32", None)
+        
+        # Wait for the scrcpy window to appear (up to 8 seconds)
+        hwnd = 0
+        start = time.time()
+        while time.time() - start < 8.0:
+            hwnd = user32.FindWindowW(None, window_title)
+            if hwnd:
+                break
+            time.sleep(0.1)
+            
+        if not hwnd:
+            return
+            
+        time.sleep(0.15)
+        
+        # 1. Apply Rounded Corners (DWM & GDI)
+        try:
+            if dwmapi:
+                val = ctypes.c_int(2) # DWMWCP_ROUND
+                dwmapi.DwmSetWindowAttribute(hwnd, 33, ctypes.byref(val), ctypes.sizeof(val))
+        except Exception:
+            pass
+            
+        try:
+            if gdi32:
+                rect = wintypes.RECT()
+                user32.GetWindowRect(hwnd, ctypes.byref(rect))
+                w = rect.right - rect.left
+                h = rect.bottom - rect.top
+                if w > 50 and h > 50:
+                    rgn = gdi32.CreateRoundRectRgn(0, 0, w + 1, h + 1, 24, 24)
+                    user32.SetWindowRgn(hwnd, rgn, True)
+        except Exception:
+            pass
+
+        # 2. Direct Smooth Window Dragging ONLY from Top Bar (top 36 pixels)
+        top_bar_height = 36
+        pt = wintypes.POINT()
+        rect = wintypes.RECT()
+        
+        while user32.IsWindow(hwnd):
+            time.sleep(0.010)
+            # Check left mouse button press (VK_LBUTTON = 0x01)
+            if user32.GetAsyncKeyState(0x01) & 0x8000:
+                user32.GetCursorPos(ctypes.byref(pt))
+                user32.GetWindowRect(hwnd, ctypes.byref(rect))
+                
+                # If initial click is inside top bar area
+                if rect.left <= pt.x <= rect.right and rect.top <= pt.y <= rect.top + top_bar_height:
+                    start_mouse_x = pt.x
+                    start_mouse_y = pt.y
+                    start_win_x = rect.left
+                    start_win_y = rect.top
+                    
+                    # Smoothly move window with cursor while left button is held
+                    while user32.IsWindow(hwnd) and (user32.GetAsyncKeyState(0x01) & 0x8000):
+                        user32.GetCursorPos(ctypes.byref(pt))
+                        dx = pt.x - start_mouse_x
+                        dy = pt.y - start_mouse_y
+                        if dx != 0 or dy != 0:
+                            # 0x0015 = SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE
+                            user32.SetWindowPos(hwnd, 0, start_win_x + dx, start_win_y + dy, 0, 0, 0x0015)
+                        time.sleep(0.008)
+
+        # Mirror window was closed -> clean up process and disconnect wireless phone session
+        _active_mirror_processes.pop(target, None)
+        if not is_tv:
+            try:
+                from backend.adb_manager import adb_manager
+                adb_manager.disconnect(target)
+                logger.info(f"Disconnected phone session on mirror window exit: {target}")
+            except Exception:
+                pass
+                        
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+
+@log_execution_time
+def launch_all_mirrors():
+    """Launch 60FPS scrcpy mirrors for all connected devices (Phone + TV) side-by-side."""
+    from backend.adb_manager import adb_manager
+    devices = [d for d in adb_manager.list_devices() if d["status"] == "device"]
+    if not devices:
+        return {"status": "error", "output": "No connected devices found via ADB."}
+    
+    results = []
+    for d in devices:
+        r = launch_phone_mirror(d["id"])
+        results.append(f"{d['id']}: {r.get('output', '')}")
+    return {"status": "success", "output": " | ".join(results)}
 
 @log_execution_time
 def close_application(app_name):

@@ -91,6 +91,31 @@ def add_fact(fact):
         profile["facts"] = profile["facts"][-50:]
         save_profile(profile)
 
+def edit_fact(old_fact, new_fact):
+    profile = load_profile()
+    facts = profile.get("facts", [])
+    updated = False
+    new_facts = []
+    for f in facts:
+        if f.strip() == old_fact.strip():
+            if new_fact.strip():
+                new_facts.append(new_fact.strip())
+            updated = True
+        else:
+            new_facts.append(f)
+    if not updated and new_fact.strip():
+        new_facts.append(new_fact.strip())
+    profile["facts"] = new_facts
+    save_profile(profile)
+    return True
+
+def delete_fact(fact_to_delete):
+    profile = load_profile()
+    facts = profile.get("facts", [])
+    profile["facts"] = [f for f in facts if f.strip() != fact_to_delete.strip()]
+    save_profile(profile)
+    return True
+
 def add_dislike(dislike):
     profile = load_profile()
     existing_lower = [d.lower() for d in profile["dislikes"]]

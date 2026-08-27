@@ -24,9 +24,15 @@ venv/
 env/
 ENV/
 
-# ─── Editor / OS ───────────────────────────────────────────
+# ─── Node / Frontend ───────────────────────────────────────
+node_modules/
+frontend/node_modules/
+.npm/
+
+# ─── Editor / OS / Agent ───────────────────────────────────
 .freebuff/
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
+.agents/

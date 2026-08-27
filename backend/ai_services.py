@@ -461,7 +461,7 @@ def call_real_edge_tts(text):
         cleaned = clean_and_summarize_for_speech(text)
         if not cleaned: return b""
         config = load_config()
-        voice = config.get("voice", "en-US-SteffanNeural")
+        voice = config.get("voice", "en-GB-RyanNeural")
         communicate = edge_tts.Communicate(cleaned, voice)
         audio_data = b""
         async for chunk in communicate.stream():
@@ -511,7 +511,14 @@ def call_edge_tts(text):
 class QuotaExceededError(Exception):
     pass
 
+_KEYS_CACHE = None
+_KEYS_CACHE_TIME = 0
+
 def get_all_available_keys():
+    global _KEYS_CACHE, _KEYS_CACHE_TIME
+    if _KEYS_CACHE is not None and (time.time() - _KEYS_CACHE_TIME < 30):
+        return _KEYS_CACHE
+
     cred_manager = get_credential_manager()
     available_keys = []
     providers = ['gemini', 'groq', 'puter', 'openrouter']
@@ -542,6 +549,8 @@ def get_all_available_keys():
             pass
     provider_rank = {'gemini': 0, 'groq': 1, 'puter': 2, 'openrouter': 3}
     available_keys.sort(key=lambda x: provider_rank.get(x["provider"], 99))
+    _KEYS_CACHE = available_keys
+    _KEYS_CACHE_TIME = time.time()
     return available_keys
 
 def mark_key_exhausted(api_key):
@@ -700,6 +709,167 @@ def call_openrouter_api(text, api_key, messages=None):
     except Exception as e:
         logger.error(f"OpenRouter API error: {e}")
         return {"reply": "I encountered an error processing your request.", "commands": [], "memory_updates": []}
+
+# ──────────────────────────────────────────────────────────────
+# Streaming LLM API Callers
+# ──────────────────────────────────────────────────────────────
+
+def _parse_sse_lines(response):
+    """Yield individual SSE `data:` payloads from a chunked HTTP response."""
+    buffer = ""
+    while True:
+        chunk = response.read(1024)
+        if not chunk:
+            break
+        buffer += chunk.decode("utf-8", errors="ignore")
+        while "\n" in buffer:
+            line, buffer = buffer.split("\n", 1)
+            line = line.strip()
+            if line.startswith("data: "):
+                yield line[6:]
+
+
+def call_gemini_api_streaming(text, api_key, contents=None, stream_callback=None,
+                              image_base64=None, image_mime=None):
+    """Stream tokens from Gemini's streamGenerateContent endpoint."""
+    try:
+        model = "gemini-3.1-flash-lite"
+        url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
+               f"{model}:streamGenerateContent?alt=sse&key={api_key}")
+        payload = {"contents": contents}
+        if image_base64 and image_mime:
+            if contents and len(contents) > 0:
+                last_content = contents[-1]
+                if "parts" in last_content:
+                    last_content["parts"].append(
+                        {"inline_data": {"mime_type": image_mime, "data": image_base64}})
+        headers = {"Content-Type": "application/json"}
+        req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
+
+        full_text = ""
+        with urllib.request.urlopen(req, timeout=60) as response:
+            for data_str in _parse_sse_lines(response):
+                if not data_str or data_str == "[DONE]":
+                    continue
+                try:
+                    chunk = json.loads(data_str)
+                    candidates = chunk.get("candidates", [])
+                    if candidates:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        for part in parts:
+                            token = part.get("text", "")
+                            if token:
+                                full_text += token
+                                if stream_callback:
+                                    stream_callback(token)
+                except (json.JSONDecodeError, KeyError, IndexError):
+                    continue
+
+        # Parse the complete text for structured JSON response
+        parsed = extract_json_response(full_text)
+        if parsed is not None:
+            return parsed
+        return {"reply": full_text, "commands": [], "memory_updates": []}
+
+    except urllib.error.HTTPError as e:
+        if e.code == 429:
+            raise QuotaExceededError("API quota exceeded")
+        logger.error(f"Gemini streaming HTTP error: {e}")
+        return {"reply": "I'm having trouble connecting to my AI services. Please try again.",
+                "commands": [], "memory_updates": []}
+    except Exception as e:
+        logger.error(f"Gemini streaming error: {e}")
+        return {"reply": "I encountered an error processing your request.",
+                "commands": [], "memory_updates": []}
+
+
+def call_openai_compatible_streaming(url, api_key, messages, stream_callback=None,
+                                     extra_headers=None, model="llama3-70b-8192"):
+    """Stream tokens from an OpenAI-compatible API (Groq, Puter, OpenRouter)."""
+    try:
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": 0.7,
+            "max_tokens": 1024,
+            "stream": True,
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        }
+        if extra_headers:
+            headers.update(extra_headers)
+
+        req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
+
+        full_text = ""
+        with urllib.request.urlopen(req, timeout=60) as response:
+            for data_str in _parse_sse_lines(response):
+                if not data_str or data_str == "[DONE]":
+                    continue
+                try:
+                    chunk = json.loads(data_str)
+                    choices = chunk.get("choices", [])
+                    if choices:
+                        delta = choices[0].get("delta", {})
+                        token = delta.get("content", "")
+                        if token:
+                            full_text += token
+                            if stream_callback:
+                                stream_callback(token)
+                except (json.JSONDecodeError, KeyError, IndexError):
+                    continue
+
+        parsed = extract_json_response(full_text)
+        if parsed is not None:
+            return parsed
+        return {"reply": full_text, "commands": [], "memory_updates": []}
+
+    except urllib.error.HTTPError as e:
+        if e.code == 429:
+            raise QuotaExceededError("API quota exceeded")
+        logger.error(f"Streaming API HTTP error ({url}): {e}")
+        return {"reply": "I'm having trouble connecting to my AI services. Please try again.",
+                "commands": [], "memory_updates": []}
+    except Exception as e:
+        logger.error(f"Streaming API error ({url}): {e}")
+        return {"reply": "I encountered an error processing your request.",
+                "commands": [], "memory_updates": []}
+
+
+def call_llm_streaming(provider, api_key, text, history, loop_turns,
+                       system_instruction, stream_callback=None,
+                       image_base64=None, image_mime=None):
+    """Unified streaming dispatcher for all supported LLM providers."""
+    if provider == "gemini":
+        contents = prepare_llm_payload("gemini", text, history, loop_turns, system_instruction)
+        return call_gemini_api_streaming(
+            text, api_key, contents=contents, stream_callback=stream_callback,
+            image_base64=image_base64, image_mime=image_mime)
+    elif provider == "groq":
+        messages = prepare_llm_payload("groq", text, history, loop_turns, system_instruction)
+        return call_openai_compatible_streaming(
+            "https://api.groq.com/openai/v1/chat/completions",
+            api_key, messages, stream_callback=stream_callback,
+            model="llama3-70b-8192")
+    elif provider == "puter":
+        messages = prepare_llm_payload("puter", text, history, loop_turns, system_instruction)
+        return call_openai_compatible_streaming(
+            "https://api.puter.com/v2/chat/completions",
+            api_key, messages, stream_callback=stream_callback,
+            model="gpt-4o-mini")
+    elif provider == "openrouter":
+        messages = prepare_llm_payload("openrouter", text, history, loop_turns, system_instruction)
+        return call_openai_compatible_streaming(
+            "https://openrouter.ai/api/v1/chat/completions",
+            api_key, messages, stream_callback=stream_callback,
+            extra_headers={"HTTP-Referer": "https://jasva.ai", "X-Title": "JASVA"},
+            model="anthropic/claude-3-haiku")
+    else:
+        # Fallback to non-streaming
+        return None
+
 
 # ──────────────────────────────────────────────────────────────
 # Conversational Flow Manager
@@ -869,6 +1039,7 @@ def build_system_prompt(nlp_analysis=None):
         "calming when stressed, encouraging when working, cheerful when happy, empathetic when sad.\n"
         "- Use standard markdown formatting (**bold**, *italics*, lists, code blocks) for readable chat responses.\n"
         "- Keep responses concise for voice clarity — 1-3 sentences unless details or complex reasoning is needed.\n"
+        "- BRITISH CADENCE & WIT: Express yourself with the sophisticated poise, dry understated wit, and polite British cadence reminiscent of Jarvis (e.g. 'Right away, sir', 'Splendid', 'At once, sir', 'Certainly, sir'). Keep speech crisp, articulate, and refined.\n"
         "- When reporting command failures, explain in plain language. Never dump raw error traces.\n"
         "- UNDERSTAND MODERN SPEECH: The user may use Gen Z slang, abbreviations (fr, ngl, tbh, rn, smh, lowkey, etc.), "
         "metaphors, and internet shortcuts. Understand all perfectly without asking for clarification, but respond in "
@@ -912,7 +1083,22 @@ def build_system_prompt(nlp_analysis=None):
         "Memory: remember, show memory, forget, clear memory\n"
         "Macros: create macro, run macro, show macros\n"
         "Smart TV (ADB/IP Control): tv ip [ip], tv connect, tv status, tv button [button_name] (e.g. up, down, select, back, home, power, volume_up), tv open [app_name] (e.g. netflix, youtube, prime), tv play [youtube_search], tv play link [url]\n"
-        "Phone Remote (ADB Control): phone connect [ip:port], phone pair [ip:port] [pairing_code], phone status, phone button [keycode], phone tap [x] [y], phone type [text], phone open [package_name]\n\n"
+        "Phone Remote (ADB Control): phone connect [ip:port], phone pair [ip:port] [pairing_code], phone status, phone button [keycode], phone tap [x] [y], phone type [text], phone open [package_name], phone do [task]\n\n"
+
+        "MULTI-DEVICE TARGET ROUTING (CRITICAL):\n"
+        "1. DEFAULT TARGET (No device specified) -> The user's Windows PC.\n"
+        "   - 'open spotify and play jazz' -> ['spotify jazz'] (plays on PC)\n"
+        "   - 'open chrome', 'mute', 'volume 70', 'lock pc' -> applies to PC.\n"
+        "2. PHONE TARGET (User specifies 'on phone', 'on my phone', 'phone open', 'phone play') -> Phone commands:\n"
+        "   - 'open spotify on phone' -> ['phone open com.spotify.music']\n"
+        "   - 'play lo-fi on phone' -> ['phone do open YouTube and play lo-fi']\n"
+        "   - 'open whatsapp on phone' -> ['phone open com.whatsapp']\n"
+        "3. TV TARGET (User specifies 'on tv', 'on my tv', 'tv play', 'tv open') -> Smart TV commands:\n"
+        "   - 'play jazz on tv' -> ['tv play jazz']\n"
+        "   - 'open netflix on tv' -> ['tv open netflix']\n"
+        "   - 'turn off tv' -> ['tv button power']\n"
+        "4. PC TARGET (User specifies 'on pc', 'on my pc', 'on computer') -> PC commands:\n"
+        "   - 'play jazz on pc' -> ['spotify jazz'] or ['youtube jazz']\n\n"
 
         "RESPONSE FORMAT — Return ONLY valid JSON:\n"
         "{\n"
@@ -937,16 +1123,16 @@ def build_system_prompt(nlp_analysis=None):
         mood_context = EmotionalStateManager.get_mood_context()
         if mood_context:
             system_instruction += mood_context + "\n"
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Emotional state injection error: {e}")
 
     # ── Inject conversation flow ──
     try:
         flow_context = ConversationFlowManager.get_flow_context()
         if flow_context:
             system_instruction += flow_context + "\n"
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Conversation flow injection error: {e}")
 
     # ── Inject semantic memory context ──
     if nlp_analysis:
@@ -958,8 +1144,8 @@ def build_system_prompt(nlp_analysis=None):
                 system_instruction += "\nRelevant memories about the user (use naturally):\n"
                 for mem in relevant_memories:
                     system_instruction += f"- {mem}\n"
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Semantic memory context error: {e}")
 
     system_instruction += current_context
     if schedule_context: system_instruction += schedule_context
@@ -989,7 +1175,7 @@ def emit_agent_event(window, event_type, data):
         except Exception as e:
             print(f"Error evaluating agent JS: {e}")
 
-def run_agentic_loop(text, window=None, image_base64=None, image_mime=None):
+def run_agentic_loop(text, window=None, image_base64=None, image_mime=None, stream_callback=None):
     from backend.memory_scheduler import (
         get_relevant_context, process_memory_updates, load_chat_history,
         get_history_for_prompt, should_summarize, compress_history,
@@ -1044,42 +1230,62 @@ def run_agentic_loop(text, window=None, image_base64=None, image_mime=None):
     # Pass NLP analysis into the prompt builder for context injection
     base_prompt = build_system_prompt(nlp_analysis=nlp_analysis)
     planning_instruction = base_prompt + "\n\n" + """
-AGENTIC PLANNING & RESPONSE FORMAT:
-You must think step-by-step to decompose complex goals, update your plan at each step, and execute commands until the goal is achieved.
-You are a fully autonomous agent. If a task requires system modifications or operations (e.g. turning off Wi-Fi/Bluetooth, changing settings, deleting files), formulate the exact PowerShell/Python script or built-in commands to perform the action programmatically. Do NOT ask the user to configure settings manually, and do NOT tell them how to do it in your conversational reply. Act first, automate, and succeed autonomously.
-You must treat each new user goal independently. Do NOT assume it is connected to the previous tasks or conversations unless the user explicitly references the context using relative words (like "it", "that", "do it again"). If the topic has shifted, forget the previous goals and execute the new goal independently.
+AUTONOMOUS AGENTIC EXECUTION BLUEPRINT:
+You are an autonomous AI agent capable of taking care of any complex task the user gives you.
+Always think step-by-step to decompose goals, execute tools, inspect observations, and self-correct if errors occur.
 
-Return ONLY valid JSON in this format:
+AVAILABLE AGENT TOOLS (use inside the 'commands' array):
+1. Web & Online Research:
+   - 'web_search_api [query]' — Search DuckDuckGo and get top titles, URLs, and snippets.
+   - 'web_fetch_api [url]' — Scrape and read the full text content of a webpage.
+
+2. Code & System Automation:
+   - 'run python [code]' — Execute Python code directly on the local system and get stdout/stderr.
+   - 'run powershell [script]' — Execute PowerShell command/script and get output.
+   - 'open [app_name]' — Launch applications (e.g. 'open notepad', 'open chrome', 'open spotify').
+   - 'close [app_name]' — Terminate applications.
+   - 'volume [0-100]', 'mute', 'unmute', 'brightness [0-100]', 'screenshot'.
+
+3. Filesystem Operations:
+   - 'write file [path] | [content]' — Create or overwrite a file with content.
+   - 'read file [path]' — Read file content.
+   - 'append file [path] | [content]' — Append content to a file.
+   - 'delete file [path]' — Delete a file.
+   - 'list directory [path]' — List files and subfolders in directory.
+
+4. Notes, Schedules & Memory:
+   - 'add note [text]' / 'show notes' — Manage user notes and agendas.
+   - 'set timer [duration]' — Set countdown timers.
+   - 'remember [fact]' — Store persistent fact about the user.
+
+5. Remote Device Controls:
+   - 'phone do [task]' — Autonomous Vision Agent: captures phone screen via ADB, inspects UI, and taps/types/swipes.
+   - 'phone look' / 'phone screenshot' — Inspect current phone screen.
+   - 'tv open [app]' / 'tv play [query]' / 'tv button [key]' — Control Smart TV.
+
+RESPONSE FORMAT (Return ONLY valid JSON):
 {
-  "thought": "Your reasoning about the current situation, errors, or next actions.",
+  "thought": "Your reasoning about the user's goal, step decomposition, and next tool to run.",
   "plan": [
-    "Step 1 details [Done]",
-    "Step 2 details [Active]",
-    "Step 3 details [Pending]"
+    "Step 1: Research/Inspect [Done]",
+    "Step 2: Create/Execute [Active]",
+    "Step 3: Verify & Deliver [Pending]"
   ],
-  "current_step": "Description of the step you are executing now.",
-  "commands": ["command_1", "command_2"],
+  "current_step": "Description of current action.",
+  "commands": ["command_to_run"],
   "memory_updates": [],
-  "reply": "Conversational reply to the user explaining what you are doing (keep it short, 1-2 sentences).",
-  "emotion": "One of: 'calm', 'happy', 'excited', 'sad', 'angry', 'curious' depending on your mood and the context."
+  "reply": "Conversational progress update to user (short, 1 sentence).",
+  "emotion": "One of: 'calm', 'happy', 'excited', 'sad', 'curious'"
 }
 
-When all tasks are complete and you have achieved the goal, set "commands" to an empty array [], "current_step": "Complete", and provide a complete final summary of your actions and findings in the "reply" field (you can use markdown formatting in this final reply).
-
-NEW SPECIAL BROWSER TOOLS AVAILABLE:
-- 'web_search_api [query]' — Programmatically search DuckDuckGo and get titles, URLs, and snippets of top results. Use this instead of search_web if you need to read the search results.
-- 'web_fetch_api [url]' — Programmatically scrape the text content of a webpage. Use this to read page contents.
-
-PHONE CONTROL TOOL (use whenever the user wants something done ON their phone):
-- 'phone do <task>' — JASVA captures the phone screen via ADB, SEES what is on it, and taps/swipes/types to complete the task autonomously. Example: phone do "open YouTube and play lofi beats". Use this for opening apps, searching, navigating, typing, or playing anything on the phone.
-- 'phone look' — Describe what is currently on the phone screen.
-- 'phone screenshot' — Save a screenshot of the phone screen to disk.
-
+When all steps are finished and you have verified the results, set "commands": [], "current_step": "Complete", and provide the complete final deliverable / summary in the "reply" field.
 """
     history = get_history_for_prompt()
     max_turns = 10
     current_turn = 0
     final_reply = ""
+    last_thought = ""
+    last_plan = []
     loop_turns = []
     retry_count = 0
     max_retries = 1  # Max confidence-based retries per turn
@@ -1094,22 +1300,38 @@ PHONE CONTROL TOOL (use whenever the user wants something done ON their phone):
             return offline_res
             
         llm_res = None
+        # Use streaming on the first turn so the user sees tokens in real-time.
+        # Subsequent turns (command re-planning) use non-streaming for speed.
+        use_streaming = (current_turn == 1 and stream_callback is not None)
+        if use_streaming:
+            emit_agent_event(window, "stream_start", {})
+
         for key_info in available_keys:
             provider = key_info["provider"]
             api_key = key_info["key"]
             try:
-                if provider == "puter":
-                    messages = prepare_llm_payload("puter", text, history, loop_turns, planning_instruction)
-                    llm_res = call_puter_api(text, api_key, messages=messages)
-                elif provider == "groq":
-                    messages = prepare_llm_payload("groq", text, history, loop_turns, planning_instruction)
-                    llm_res = call_groq_api(text, api_key, messages=messages)
-                elif provider == "openrouter":
-                    messages = prepare_llm_payload("openrouter", text, history, loop_turns, planning_instruction)
-                    llm_res = call_openrouter_api(text, api_key, messages=messages)
-                elif provider == "gemini":
-                    contents = prepare_llm_payload("gemini", text, history, loop_turns, planning_instruction)
-                    llm_res = call_gemini_api_direct(text, api_key, contents=contents, system_instruction=planning_instruction, image_base64=image_base64, image_mime=image_mime)
+                if use_streaming:
+                    llm_res = call_llm_streaming(
+                        provider, api_key, text, history, loop_turns,
+                        planning_instruction, stream_callback=stream_callback,
+                        image_base64=image_base64, image_mime=image_mime)
+                    # If streaming dispatch returned None (unsupported), fall back
+                    if llm_res is None:
+                        use_streaming = False
+
+                if not use_streaming:
+                    if provider == "puter":
+                        messages = prepare_llm_payload("puter", text, history, loop_turns, planning_instruction)
+                        llm_res = call_puter_api(text, api_key, messages=messages)
+                    elif provider == "groq":
+                        messages = prepare_llm_payload("groq", text, history, loop_turns, planning_instruction)
+                        llm_res = call_groq_api(text, api_key, messages=messages)
+                    elif provider == "openrouter":
+                        messages = prepare_llm_payload("openrouter", text, history, loop_turns, planning_instruction)
+                        llm_res = call_openrouter_api(text, api_key, messages=messages)
+                    elif provider == "gemini":
+                        contents = prepare_llm_payload("gemini", text, history, loop_turns, planning_instruction)
+                        llm_res = call_gemini_api_direct(text, api_key, contents=contents, system_instruction=planning_instruction, image_base64=image_base64, image_mime=image_mime)
                 
                 if isinstance(llm_res, dict):
                     reply = llm_res.get("reply", "")
@@ -1128,6 +1350,9 @@ PHONE CONTROL TOOL (use whenever the user wants something done ON their phone):
             offline_res = handle_offline_fallback(text)
             emit_agent_event(window, "stop", {"reply": offline_res.get("output", "")})
             return offline_res
+
+        if use_streaming:
+            emit_agent_event(window, "stream_end", {})
             
         if not isinstance(llm_res, dict):
             emit_agent_event(window, "stop", {"reply": str(llm_res)})
@@ -1137,6 +1362,8 @@ PHONE CONTROL TOOL (use whenever the user wants something done ON their phone):
         # Evaluate if the response actually addresses the user's intent
         thought = llm_res.get("thought", "")
         plan = llm_res.get("plan", [])
+        last_thought = thought
+        last_plan = plan
         current_step_label = llm_res.get("current_step", "")
         reply = llm_res.get("reply", "")
         commands_list = llm_res.get("commands", [])
@@ -1224,11 +1451,13 @@ PHONE CONTROL TOOL (use whenever the user wants something done ON their phone):
         add_to_chat_history("user", text)
         add_to_chat_history("assistant", final_reply)
         
+    net_status = get_cached_network_status()
     res = {
         "status": "success", "output": final_reply,
+        "thought": last_thought, "plan": last_plan,
         "system_logs": list(SYSTEM_LOGS), "cmd_history": list(USER_COMMANDS_HISTORY),
-        "weather": get_cached_network_status()["weather"], "ping": get_cached_network_status()["ping"],
-        "external_ip": get_cached_network_status()["ip"], "net_status": get_cached_network_status()["status"]
+        "weather": net_status["weather"], "ping": net_status["ping"],
+        "external_ip": net_status["ip"], "net_status": net_status["status"]
     }
     is_error_output = any(kw in str(final_reply).lower() for kw in ["trouble connecting", "encountered an error processing", "api error", "rate limit", "quota exceeded"])
     if not is_error_output:

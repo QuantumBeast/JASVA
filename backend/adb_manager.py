@@ -165,6 +165,10 @@ class ADBManager:
         """Send keyevent command."""
         return self.run_cmd(["-s", ip_port, "shell", "input", "keyevent", str(keycode)])
 
+    def send_key_fast(self, ip_port, keycode):
+        """Fast keyevent wrapper."""
+        return self.send_key(ip_port, keycode)
+
     def send_tap(self, ip_port, x, y):
         """Send tap command."""
         return self.run_cmd(["-s", ip_port, "shell", "input", "tap", str(x), str(y)])
@@ -181,6 +185,10 @@ class ADBManager:
         # Better: use double quotes and escape quotes
         escaped = escaped.replace('"', '\\"').replace(' ', '%s')
         return self.run_cmd(["-s", ip_port, "shell", "input", "text", escaped])
+
+    def send_text_fast(self, ip_port, text):
+        """Fast text input wrapper."""
+        return self.send_text(ip_port, text)
 
     def launch_app(self, ip_port, package_name):
         """Launch application by package name using monkey tool or am start."""
@@ -258,23 +266,68 @@ class ADBManager:
         except Exception:
             pass
 
-    def send_key_fast(self, ip_port, keycode):
-        """Send a keyevent through the persistent shell - instant on warm shells."""
+    def send_tap_fast(self, ip_port, x, y):
+        """Send a tap through the persistent shell - instant without subprocess overhead."""
         target = self._normalize_target(ip_port)
         shell = self._get_or_create_shell(target)
         if shell is None:
-            return {"status": "error", "message": "adb shell unavailable"}
+            return self.send_tap(ip_port, x, y)
         try:
-            shell.write(f"input keyevent {keycode}")
+            shell.write(f"input tap {x} {y}")
             return {"status": "success"}
         except Exception as e:
             shell.close()
             with self._shell_lock:
                 self._shells.pop(target, None)
-            return {"status": "error", "message": str(e)}
+            return self.send_tap(ip_port, x, y)
+
+    def send_swipe_fast(self, ip_port, x1, y1, x2, y2, duration=300):
+        """Send a swipe/drag through the persistent shell - instant without subprocess overhead."""
+        target = self._normalize_target(ip_port)
+        shell = self._get_or_create_shell(target)
+        if shell is None:
+            return self.send_swipe(ip_port, x1, y1, x2, y2, duration)
+        try:
+            shell.write(f"input swipe {x1} {y1} {x2} {y2} {duration}")
+            return {"status": "success"}
+        except Exception as e:
+            shell.close()
+            with self._shell_lock:
+                self._shells.pop(target, None)
+            return self.send_swipe(ip_port, x1, y1, x2, y2, duration)
+
+    def send_text_fast(self, ip_port, text):
+        """Send text through the persistent shell - instant without subprocess overhead."""
+        target = self._normalize_target(ip_port)
+        shell = self._get_or_create_shell(target)
+        if shell is None:
+            return self.send_text(ip_port, text)
+        try:
+            escaped = re.sub(r'([&|<>#*?()$])', r'\\\1', text).replace('"', '\\"').replace(' ', '%s')
+            shell.write(f"input text {escaped}")
+            return {"status": "success"}
+        except Exception as e:
+            shell.close()
+            with self._shell_lock:
+                self._shells.pop(target, None)
+            return self.send_text(ip_port, text)
+
+    def set_auto_rotate(self, ip_port, enable=False):
+        """Enable or disable device auto-rotate (0 = locked portrait/current, 1 = auto-rotate)."""
+        val = "1" if enable else "0"
+        return self.run_cmd(["-s", ip_port, "shell", "settings", "put", "system", "accelerometer_rotation", val])
+
+    def get_auto_rotate(self, ip_port):
+        """Get device auto-rotate setting (0 or 1)."""
+        res = self.run_cmd(["-s", ip_port, "shell", "settings", "get", "system", "accelerometer_rotation"])
+        if res.get("status") == "success":
+            val = res.get("output", "").strip()
+            return {"status": "success", "auto_rotate": val == "1"}
+        return res
 
 # Global instance
 adb_manager = ADBManager()
 # Persistent shell cache (needs the instance's adb path, so init after instance)
 adb_manager._shells = {}
 adb_manager._shell_lock = threading.Lock()
+

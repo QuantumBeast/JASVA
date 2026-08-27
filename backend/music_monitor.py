@@ -11,6 +11,7 @@ from typing import Optional, Callable
 # poll. Python reads lines from the pipe — no more spawning a process each poll.
 PERSISTENT_PS_SCRIPT = r'''
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
 $null = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media.Control, ContentType=WindowsRuntime]
@@ -46,26 +47,75 @@ function Write-Line($obj) {
     } catch {}
 }
 
+function Get-ActiveSession($mgr) {
+    $sessionList = @()
+    foreach ($sess in $mgr.GetSessions()) {
+        $sessionList += $sess
+    }
+    if ($sessionList.Count -eq 0) { return $null }
+
+    # 1. Look for a session that is Playing AND has a valid title
+    foreach ($sess in $sessionList) {
+        try {
+            $pb = $sess.GetPlaybackInfo()
+            if ($pb -and $pb.PlaybackStatus.ToString() -eq 'Playing') {
+                $p = AwaitWinRT ($sess.TryGetMediaPropertiesAsync()) $propsType
+                if ($p -and $p.Title) { return $sess }
+            }
+        } catch {}
+    }
+
+    # 2. Look for any session that is currently Playing
+    foreach ($sess in $sessionList) {
+        try {
+            $pb = $sess.GetPlaybackInfo()
+            if ($pb -and $pb.PlaybackStatus.ToString() -eq 'Playing') {
+                return $sess
+            }
+        } catch {}
+    }
+
+    # 3. Look for any session with a valid Title (paused)
+    foreach ($sess in $sessionList) {
+        try {
+            $p = AwaitWinRT ($sess.TryGetMediaPropertiesAsync()) $propsType
+            if ($p -and $p.Title) { return $sess }
+        } catch {}
+    }
+
+    # 4. Fallback to current session or first
+    try {
+        $curr = $mgr.GetCurrentSession()
+        if ($curr) { return $curr }
+    } catch {}
+    return $sessionList[0]
+}
+
 # Only re-read the (potentially large) thumbnail when the track changes.
 $lastKey = ""
 $lastThumb = ""
 
 function Get-MediaJson {
     $mgr = AwaitWinRT ($mgrType::RequestAsync()) $mgrType
-    $sessions = $mgr.GetSessions()
+    $s = Get-ActiveSession $mgr
 
-    if ($sessions.Count -eq 0) {
+    if ($null -eq $s) {
         return [PSCustomObject]@{ status = "none" }
     }
 
-    $s = $sessions[0]
     $props = AwaitWinRT ($s.TryGetMediaPropertiesAsync()) $propsType
     $playback = $s.GetPlaybackInfo()
     $timeline = $s.GetTimelineProperties()
 
+    $appId  = if ($s.SourceAppId) { $s.SourceAppId } else { "" }
     $title  = if ($props.Title) { $props.Title } else { "" }
     $artist = if ($props.Artist) { $props.Artist } else { "" }
     $album  = if ($props.AlbumTitle) { $props.AlbumTitle } else { "" }
+
+    if (-not $title -and $appId) {
+        $cleanApp = ($appId -split '\\')[-1] -replace '\.exe$', ''
+        $title = "$cleanApp Audio"
+    }
 
     $key = "$title|$artist|$album"
     if ($key -ne $script:lastKey) {
@@ -82,15 +132,31 @@ function Get-MediaJson {
         }
     }
 
-    $posMs = [long]($timeline.Position.Ticks / 10000)
-    $durMs = [long]($timeline.EndTime.Ticks / 10000)
+    $posTicks = if ($timeline.Position) { $timeline.Position.Ticks } else { 0 }
+    $durTicks = if ($timeline.EndTime) { $timeline.EndTime.Ticks } else { 0 }
+
+    $pbStatus = if ($playback -and $playback.PlaybackStatus) { $playback.PlaybackStatus.ToString() } else { "Paused" }
+
+    if ($pbStatus -eq "Playing" -and $timeline) {
+        $now = [DateTimeOffset]::UtcNow
+        $delta = $now - $timeline.LastUpdatedTime
+        if ($delta.TotalMilliseconds -gt 0 -and $delta.TotalMilliseconds -lt 86400000) {
+            $posTicks = $posTicks + $delta.Ticks
+            if ($durTicks -gt 0 -and $posTicks -gt $durTicks) {
+                $posTicks = $durTicks
+            }
+        }
+    }
+
+    $posMs = [long]($posTicks / 10000)
+    $durMs = [long]($durTicks / 10000)
 
     return [PSCustomObject]@{
         status    = "ok"
         title     = $title
         artist    = $artist
         album     = $album
-        playback  = $playback.PlaybackStatus.ToString()
+        playback  = $pbStatus
         position  = $posMs
         duration  = $durMs
         thumbnail = $script:lastThumb
@@ -114,11 +180,13 @@ ONE_SHOT_PS_SCRIPT = PERSISTENT_PS_SCRIPT.split('while ($true) {')[0].strip() + 
 # Playback control (toggle play/pause, next, prev). Run one-shot, hidden.
 CONTROL_PS_SCRIPT = r'''
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
 $null = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media.Control, ContentType=WindowsRuntime]
 $mgrType = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]
 $sessionType = $mgrType.GetMethod('GetSessions').ReturnType.GetGenericArguments()[0]
+$propsType = $sessionType.GetMethod('TryGetMediaPropertiesAsync').ReturnType.GetGenericArguments()[0]
 
 $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
     $_.Name -eq 'AsTask' -and
@@ -133,16 +201,62 @@ function AwaitWinRT($WinRtTask, $ResultType) {
     $netTask.Result
 }
 
+function Get-ActiveSession($mgr) {
+    $sessionList = @()
+    foreach ($sess in $mgr.GetSessions()) {
+        $sessionList += $sess
+    }
+    if ($sessionList.Count -eq 0) { return $null }
+
+    foreach ($sess in $sessionList) {
+        try {
+            $pb = $sess.GetPlaybackInfo()
+            if ($pb -and $pb.PlaybackStatus.ToString() -eq 'Playing') {
+                $p = AwaitWinRT ($sess.TryGetMediaPropertiesAsync()) $propsType
+                if ($p -and $p.Title) { return $sess }
+            }
+        } catch {}
+    }
+
+    foreach ($sess in $sessionList) {
+        try {
+            $pb = $sess.GetPlaybackInfo()
+            if ($pb -and $pb.PlaybackStatus.ToString() -eq 'Playing') {
+                return $sess
+            }
+        } catch {}
+    }
+
+    foreach ($sess in $sessionList) {
+        try {
+            $p = AwaitWinRT ($sess.TryGetMediaPropertiesAsync()) $propsType
+            if ($p -and $p.Title) { return $sess }
+        } catch {}
+    }
+
+    try {
+        $curr = $mgr.GetCurrentSession()
+        if ($curr) { return $curr }
+    } catch {}
+    return $sessionList[0]
+}
+
 $mgr = AwaitWinRT ($mgrType::RequestAsync()) $mgrType
-$sessions = $mgr.GetSessions()
-if ($sessions.Count -eq 0) {
+$s = Get-ActiveSession $mgr
+if ($null -eq $s) {
     Write-Output '{"status":"none"}'
 } else {
-    $s = $sessions[0]
     switch ($env:JASVA_MEDIA_ACTION) {
         "toggle" { $op = $s.TryTogglePlayPauseAsync() }
+        "play"   { $op = $s.TryPlayAsync() }
+        "pause"  { $op = $s.TryPauseAsync() }
         "next"   { $op = $s.TrySkipNextAsync() }
         "prev"   { $op = $s.TrySkipPreviousAsync() }
+        "seek"   {
+            $posMs = [long]$env:JASVA_MEDIA_POS
+            $ticks = $posMs * 10000
+            $op = $s.TryChangePlaybackPositionAsync($ticks)
+        }
         default  { Write-Output '{"status":"error","message":"bad action"}'; exit }
     }
     $null = AwaitWinRT $op ([bool])
@@ -168,7 +282,7 @@ def query_media_once() -> dict:
     try:
         result = subprocess.run(
             ['powershell', '-NoProfile', '-NonInteractive', '-EncodedCommand', _encode_ps(ONE_SHOT_PS_SCRIPT)],
-            capture_output=True, text=True, timeout=8, encoding='utf-8',
+            capture_output=True, text=True, timeout=8, encoding='utf-8', errors='replace',
             startupinfo=_hidden_startupinfo(),
             creationflags=subprocess.CREATE_NO_WINDOW
         )
@@ -183,15 +297,23 @@ def query_media_once() -> dict:
     return {"status": "error"}
 
 
-def control_playback(action: str) -> dict:
-    """Toggle play/pause, skip next, or skip previous via Windows SMTC."""
+def control_playback(action: str, position_ms: Optional[int] = None) -> dict:
+    """Toggle play/pause, skip next, skip previous, or seek position via Windows SMTC."""
     try:
         import os
         env = dict(os.environ)
         env["JASVA_MEDIA_ACTION"] = action
+        if position_ms is not None:
+            env["JASVA_MEDIA_POS"] = str(int(position_ms))
+            try:
+                if isinstance(music_monitor._last_data, dict):
+                    music_monitor._last_data["position"] = int(position_ms)
+                music_monitor._current_position = int(position_ms)
+            except Exception:
+                pass
         result = subprocess.run(
             ['powershell', '-NoProfile', '-NonInteractive', '-EncodedCommand', _encode_ps(CONTROL_PS_SCRIPT)],
-            capture_output=True, text=True, timeout=8, encoding='utf-8',
+            capture_output=True, text=True, timeout=8, encoding='utf-8', errors='replace',
             startupinfo=_hidden_startupinfo(),
             creationflags=subprocess.CREATE_NO_WINDOW,
             env=env
@@ -281,6 +403,7 @@ class MusicMonitor:
             stderr=subprocess.DEVNULL,
             stdin=subprocess.DEVNULL,
             encoding='utf-8',
+            errors='replace',
             startupinfo=_hidden_startupinfo(),
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
@@ -312,22 +435,28 @@ class MusicMonitor:
             time.sleep(3)
 
     def _handle_data(self, data):
-        if not data or data.get('status') in ('error', 'none'):
+        if not data:
+            return
+        if data.get('status') == 'none':
+            self._last_data = {"status": "none", "title": "", "artist": "", "album": "", "playback": "Paused", "position": 0, "duration": 0, "thumbnail": ""}
+            self._is_playing = False
+            self._current_position = 0
+            self._current_duration = 0
+            return
+        if data.get('status') == 'error':
             return
 
         # Track playback state for the frontend's own smooth ticker.
         self._is_playing = data.get('playback', '').lower() == 'playing'
-        if self._is_playing:
-            self._current_position = data.get('position', 0)
-            self._current_duration = data.get('duration', 0)
+        self._current_position = data.get('position', 0)
+        self._current_duration = data.get('duration', 0)
+        self._last_data = data
 
-        if data != self._last_data:
-            self._last_data = data
-            if self.on_update:
-                try:
-                    self.on_update(data)
-                except Exception:
-                    pass
+        if self.on_update:
+            try:
+                self.on_update(data)
+            except Exception:
+                pass
 
     def fetch_lyrics(self, title: str, artist: str) -> list:
         """Fetch synced lyrics from LRCLIB API."""
@@ -365,6 +494,43 @@ class MusicMonitor:
         self._lyrics_cache[cache_key] = []
         return []
 
+    def get_current_state(self) -> dict:
+        """Return the latest cached media info or query immediately if empty."""
+        if not self._running:
+            self.start()
+        if self._last_data and self._last_data.get('status') == 'ok':
+            return self._last_data
+        fresh = query_media_once()
+        if fresh and fresh.get('status') == 'ok':
+            self._last_data = fresh
+            return fresh
+        return {"status": "none", "title": "", "artist": "", "album": "", "playback": "Paused", "position": 0, "duration": 0, "thumbnail": ""}
+
+
+def launch_media_app(app_name: str) -> dict:
+    """Launch popular media player applications."""
+    import os
+    import webbrowser
+    app_lower = app_name.strip().lower()
+    try:
+        if "spotify" in app_lower:
+            os.system("start spotify:")
+            return {"status": "success", "output": "Opening Spotify..."}
+        elif "ytmusic" in app_lower or "youtube music" in app_lower or "yt music" in app_lower:
+            webbrowser.open("https://music.youtube.com")
+            return {"status": "success", "output": "Opening YouTube Music..."}
+        elif "apple" in app_lower:
+            os.system("start itunes: || start itms:")
+            return {"status": "success", "output": "Opening Apple Music..."}
+        elif "vlc" in app_lower:
+            os.system("start vlc")
+            return {"status": "success", "output": "Opening VLC Media Player..."}
+        else:
+            os.system(f"start {app_name}")
+            return {"status": "success", "output": f"Opening {app_name}..."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 
 # Singleton instance
 music_monitor = MusicMonitor()
@@ -373,3 +539,4 @@ music_monitor = MusicMonitor()
 if __name__ == '__main__':
     data = query_media_once()
     print(json.dumps(data, indent=2))
+

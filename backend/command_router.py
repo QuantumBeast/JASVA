@@ -35,6 +35,9 @@ from backend.ai_services import (
     run_agentic_loop
 )
 
+# Plugin system
+from backend.plugins import execute_plugin_command
+
 # Router State
 PENDING_SYSTEM_ACTION = None
 CURRENT_EXPLORE_DIR = "This PC"
@@ -65,7 +68,23 @@ def clean_error_message(e):
                 return cleaned[0].upper() + cleaned[1:]
     return msg
 
+def is_autostart_enabled():
+    """Check if JASVA is currently registered in Windows HKCU Run registry key."""
+    try:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_READ)
+        try:
+            val, _ = winreg.QueryValueEx(key, "JASVA")
+            winreg.CloseKey(key)
+            return bool(val)
+        except FileNotFoundError:
+            winreg.CloseKey(key)
+            return False
+    except Exception:
+        return False
+
 def set_autostart(enabled):
+    """Register or unregister JASVA to run on Windows startup."""
     try:
         import winreg
     except ImportError:
@@ -76,15 +95,19 @@ def set_autostart(enabled):
         cmd = f'"{sys.executable}" --autostart'
     else:
         pythonw_path = sys.executable.replace("python.exe", "pythonw.exe")
+        if not os.path.exists(pythonw_path):
+            pythonw_path = sys.executable
         script_path = os.path.abspath(os.path.join(ROOT_DIR, "app.pyw"))
         cmd = f'"{pythonw_path}" "{script_path}" --autostart'
     try:
         key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
         if enabled:
             winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, cmd)
+            logger.info(f"Registered JASVA autostart command: {cmd}")
         else:
             try:
                 winreg.DeleteValue(key, app_name)
+                logger.info("Unregistered JASVA autostart from Windows registry.")
             except FileNotFoundError:
                 pass
         winreg.CloseKey(key)
@@ -104,6 +127,32 @@ def save_memory_facts(facts):
     profile["facts"] = facts
     save_profile(profile)
 
+def get_active_phone_id():
+    """Get connected ADB device that is specifically a Phone (not the Smart TV)."""
+    from backend.adb_manager import adb_manager
+    from backend.sys_utils import load_config
+    tv_ip = load_config().get("tv_ip", "").strip()
+    devices = [d for d in adb_manager.list_devices() if d["status"] == "device"]
+    for d in devices:
+        dev_id = d["id"]
+        if not (tv_ip and (dev_id == tv_ip or dev_id == f"{tv_ip}:5555" or tv_ip in dev_id)):
+            return dev_id
+    return None
+
+def get_active_tv_id():
+    """Get connected ADB device that is specifically the Smart TV."""
+    from backend.adb_manager import adb_manager
+    from backend.sys_utils import load_config
+    tv_ip = load_config().get("tv_ip", "").strip()
+    if not tv_ip:
+        return None
+    devices = [d for d in adb_manager.list_devices() if d["status"] == "device"]
+    for d in devices:
+        dev_id = d["id"]
+        if tv_ip in dev_id or dev_id == f"{tv_ip}:5555":
+            return dev_id
+    return f"{tv_ip}:5555"
+
 def handle_offline_fallback(prompt):
     from backend.sys_utils import load_config
     prompt_lower = prompt.lower().strip()
@@ -122,6 +171,12 @@ def handle_offline_fallback(prompt):
         matched_cmd = "turn on wifi"
     elif "screenshot" in prompt_lower or "take screenshot" in prompt_lower:
         matched_cmd = "screenshot"
+    elif "enable autostart" in prompt_lower or "start on boot" in prompt_lower or "turn on autostart" in prompt_lower or "launch on startup" in prompt_lower:
+        matched_cmd = "enable autostart"
+    elif "disable autostart" in prompt_lower or "turn off autostart" in prompt_lower or "disable startup" in prompt_lower:
+        matched_cmd = "disable autostart"
+    elif "autostart status" in prompt_lower or "is autostart enabled" in prompt_lower or "check autostart" in prompt_lower:
+        matched_cmd = "autostart status"
     elif "mute" in prompt_lower and "unmute" not in prompt_lower:
         matched_cmd = "mute"
     elif "unmute" in prompt_lower:
@@ -161,6 +216,26 @@ def handle_offline_fallback(prompt):
         }
 
 def handle_automation(text_lower, res):
+    # If the command explicitly targets TV or Phone, route directly to that device
+    if any(k in text_lower for k in ("on tv", "on my tv", "on the tv")):
+        from backend.tv_manager import tv_manager
+        clean = re.sub(r"\b(on|to)\s+(the\s+|my\s+)?tv\b", "", text_lower, flags=re.IGNORECASE).strip()
+        if "netflix" in clean:
+            return tv_manager.launch_app("netflix")
+        elif "youtube" in clean:
+            query = clean.replace("open youtube", "").replace("play", "").replace("search", "").replace("youtube", "").strip()
+            if query:
+                return tv_manager.play_youtube(query)
+            return tv_manager.launch_app("youtube")
+        elif "play" in clean:
+            query = clean.replace("play", "").strip()
+            return tv_manager.play_youtube(query)
+
+    if any(k in text_lower for k in ("on phone", "on my phone", "on the phone")):
+        from backend.phone_agent import run_phone_agent
+        clean = re.sub(r"\b(on|to)\s+(the\s+|my\s+)?phone\b", "", text_lower, flags=re.IGNORECASE).strip()
+        return run_phone_agent(clean)
+
     if "netflix" in text_lower:
         query = text_lower
         patterns = [r"\bopen netflix and search for\b", r"\bopen netflix and search\b", r"\bopen netflix and play\b", r"\bsearch netflix for\b", r"\bsearch for\b", r"\bplay\b", r"\bon netflix\b", r"\bopen netflix\b", r"\bnetflix\b"]
@@ -276,11 +351,57 @@ def handle_automation(text_lower, res):
         return res
     return None
 
-def _execute_command_internal(text, allow_llm_fallback=True, image_base64=None, image_mime=None, window=None):
+def _execute_command_internal(text, allow_llm_fallback=True, image_base64=None, image_mime=None, window=None, stream_callback=None):
     global PENDING_SYSTEM_ACTION, CURRENT_EXPLORE_DIR, LAST_SCAN_RESULTS
     if allow_llm_fallback:
-        return run_agentic_loop(text, window=window, image_base64=image_base64, image_mime=image_mime)
-        
+        text_lower = text.lower().strip()
+        # Auto-capture desktop screenshot in-memory if user asks to see, analyze, or asks about what's on screen
+        screen_triggers = (
+            "look at my screen", "what is on my screen", "what's on my screen",
+            "see my screen", "read my screen", "analyze my screen", "check my screen",
+            "describe screen", "explain screen", "look at this screen", "look at screen",
+            "what do you see on my screen", "what is on screen", "screen vision", "examine screen",
+            "this error", "error on my screen", "what does this say", "look at this", "read this",
+            "what am i looking at", "summarize this page", "summarize this window", "debug this code",
+            "explain this code", "what is open", "read the text", "what is highlighted", "my display"
+        )
+        if not image_base64 and (any(st in text_lower for st in screen_triggers) or text_lower in ("look", "screen", "see", "screen vision", "pc look", "pc see")):
+            from backend.pc_agent import capture_pc_screen_live
+            image_base64, image_mime, _, _ = capture_pc_screen_live()
+            if text_lower in ("look", "screen", "see", "screen vision", "pc look", "pc see"):
+                text = "Analyze what is currently visible on my desktop screen in detail and summarize the key open windows, text, or errors."
+
+        # Natural GUI action triggers (e.g. "click on the submit button", "fill out this form") -> route to PC Agent
+        gui_action_triggers = (
+            "click on ", "click the ", "double click ", "right click on ",
+            "press the button", "press button", "type in the ", "fill out this ",
+            "close the popup", "scroll down on ", "scroll up on "
+        )
+        if any(text_lower.startswith(gt) for gt in gui_action_triggers):
+            from backend.pc_agent import run_pc_agent
+            return run_pc_agent(text, window=window)
+
+        # Smart clipboard inspection
+        clipboard_triggers = (
+            "check clipboard", "explain clipboard", "fix clipboard",
+            "what is in clipboard", "what's in clipboard", "format clipboard",
+            "summarize clipboard", "read clipboard", "analyze clipboard"
+        )
+        if any(ct in text_lower for ct in clipboard_triggers) or text_lower == "clipboard":
+            from backend.sys_utils import get_clipboard_text
+            cb_content = get_clipboard_text().strip()
+            if not cb_content:
+                return {"status": "success", "output": "Your clipboard is currently empty, sir."}
+            text = f"{text}\n\n[USER CLIPBOARD CONTENT]:\n```\n{cb_content}\n```"
+
+        return run_agentic_loop(text, window=window, image_base64=image_base64, image_mime=image_mime, stream_callback=stream_callback)
+
+    # ── Check plugins before the built-in command chain ──
+    plugin_result = execute_plugin_command(text, context={"window": window})
+    if plugin_result is not None:
+        add_system_log(f"Plugin handled: {text[:50]}")
+        return plugin_result
+
     text_lower = text.lower().strip()
     folders, files = get_directory_contents(CURRENT_EXPLORE_DIR)
     res = {
@@ -347,6 +468,35 @@ def _execute_command_internal(text, allow_llm_fallback=True, image_base64=None, 
         else:
             res["status"] = "error"
             res["output"] = "Invalid write file format. Use: write file [file_path] | [content]"
+        return res
+    elif text_lower.startswith("append file "):
+        rest = text[12:].strip()
+        if " | " in rest:
+            file_path, content = rest.split(" | ", 1)
+            file_path = file_path.strip().strip('"').strip("'")
+            try:
+                with open(file_path, "a", encoding="utf-8") as f:
+                    f.write("\n" + content.strip())
+                res["output"] = f"Successfully appended to file '{file_path}'."
+            except Exception as e:
+                res["status"] = "error"
+                res["output"] = f"Failed to append to file '{file_path}': {str(e)}"
+        else:
+            res["status"] = "error"
+            res["output"] = "Invalid append file format. Use: append file [file_path] | [content]"
+        return res
+    elif text_lower.startswith("delete file ") or text_lower.startswith("remove file "):
+        file_path = text.split(" ", 2)[-1].strip().strip('"').strip("'")
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                res["output"] = f"Successfully deleted file '{file_path}'."
+            else:
+                res["status"] = "error"
+                res["output"] = f"File not found: '{file_path}'."
+        except Exception as e:
+            res["status"] = "error"
+            res["output"] = f"Failed to delete file '{file_path}': {str(e)}"
         return res
     elif text_lower.startswith("list directory "):
         folder_path = text[15:].strip().strip('"').strip("'")
@@ -548,18 +698,33 @@ def _execute_command_internal(text, allow_llm_fallback=True, image_base64=None, 
             res["status"] = "error"
             res["output"] = "Please specify a volume value between 0 and 100."
             return res
-    elif text_lower in ("play", "pause", "resume"):
+    elif text_lower in ("play", "pause", "resume", "play music", "pause music", "resume music", "toggle media", "toggle music"):
+        from backend.music_monitor import control_playback
+        control_playback("toggle")
         send_media_key(0xB3)
-        res["output"] = "Media play/pause toggled."
+        res["output"] = "Media playback toggled, sir."
         return res
-    elif text_lower in ("next track", "next"):
+    elif text_lower in ("next track", "next", "next song", "skip track", "skip song"):
+        from backend.music_monitor import control_playback
+        control_playback("next")
         send_media_key(0xB0)
-        res["output"] = "Next track."
+        res["output"] = "Skipped to next track, sir."
         return res
-    elif text_lower in ("previous track", "previous"):
+    elif text_lower in ("previous track", "previous", "previous song", "prev track", "prev song"):
+        from backend.music_monitor import control_playback
+        control_playback("prev")
         send_media_key(0xB1)
-        res["output"] = "Previous track."
+        res["output"] = "Returned to previous track, sir."
         return res
+    elif text_lower in ("what is playing", "what's playing", "current song", "now playing"):
+        from backend.music_monitor import music_monitor
+        state = music_monitor.get_current_state()
+        if state and state.get("title"):
+            res["output"] = f"Now playing: '{state.get('title')}' by {state.get('artist', 'Unknown Artist')}."
+        else:
+            res["output"] = "No active media track detected, sir."
+        return res
+
     elif text_lower.startswith("copy to clipboard "):
         clipboard_text = text[18:].strip()
         if set_clipboard_text(clipboard_text):
@@ -615,6 +780,36 @@ def _execute_command_internal(text, allow_llm_fallback=True, image_base64=None, 
         except Exception as e:
             res["status"] = "error"
             res["output"] = f"Failed to lock computer: {str(e)}"
+        return res
+    elif text_lower in ("enable autostart", "enable auto start", "turn on autostart", "start on boot", "launch on startup", "enable startup"):
+        success = set_autostart(True)
+        if success:
+            from backend.sys_utils import load_config, save_config
+            cfg = load_config()
+            cfg["autostart"] = True
+            save_config(cfg)
+            res["output"] = "Auto-start on Windows boot is now enabled, sir."
+        else:
+            res["status"] = "error"
+            res["output"] = "Failed to enable auto-start in Windows registry."
+        return res
+    elif text_lower in ("disable autostart", "disable auto start", "turn off autostart", "disable startup", "don't start on boot"):
+        success = set_autostart(False)
+        if success:
+            from backend.sys_utils import load_config, save_config
+            cfg = load_config()
+            cfg["autostart"] = False
+            save_config(cfg)
+            res["output"] = "Auto-start on Windows boot is now disabled, sir."
+        else:
+            res["status"] = "error"
+            res["output"] = "Failed to disable auto-start in Windows registry."
+        return res
+    elif text_lower in ("autostart status", "is autostart enabled", "check autostart"):
+        from backend.sys_utils import load_config
+        cfg = load_config()
+        is_on = cfg.get("autostart", False) or is_autostart_enabled()
+        res["output"] = f"Auto-start on boot is currently {'enabled' if is_on else 'disabled'}, sir."
         return res
     elif text_lower == "sleep":
         try:
@@ -681,21 +876,15 @@ def _execute_command_internal(text, allow_llm_fallback=True, image_base64=None, 
     elif text_lower.startswith("device "):
         device_cmd = text_lower[7:].strip()
         if device_cmd == "status":
-            from backend.adb_manager import adb_manager
             from backend.tv_manager import tv_manager
-            devices = adb_manager.list_devices()
             tv_connected = tv_manager.is_connected()
             tv_ip = tv_manager.get_tv_ip()
+            phone_id = get_active_phone_id()
             tv_label = f"TV: {'Connected' if tv_connected else 'Disconnected'}"
             if tv_ip:
                 tv_label += f" ({tv_ip})"
-            if devices:
-                active = [d for d in devices if d["status"] == "device"]
-                phone_status = "Connected" if active else "Disconnected"
-                phone_str = ", ".join(f"{d['id']} ({d['status']})" for d in devices if d["status"] == "device") or ", ".join(f"{d['id']}" for d in devices)
-                res["output"] = f"{tv_label}. Phone: {phone_status} ({phone_str})."
-            else:
-                res["output"] = f"{tv_label}. Phone: Disconnected (none attached)."
+            phone_label = f"Phone: {'Connected (' + phone_id + ')' if phone_id else 'Disconnected'}"
+            res["output"] = f"{tv_label}. {phone_label}."
         else:
             res["status"] = "error"
             res["output"] = f"Unknown device command: {device_cmd}"
@@ -836,9 +1025,8 @@ def _execute_command_internal(text, allow_llm_fallback=True, image_base64=None, 
                 key = phone_cmd[9:].strip()
             else:
                 key = phone_cmd[phone_cmd_lower.index(" ") + 1:].strip()
-            devices = adb_manager.list_devices()
-            if devices:
-                target = devices[0]["id"]
+            target = get_active_phone_id()
+            if target:
                 phone_res = adb_manager.send_key(target, key)
                 if phone_res["status"] == "success":
                     res["output"] = f"Sent keyevent {key} to device {target}."
@@ -852,10 +1040,9 @@ def _execute_command_internal(text, allow_llm_fallback=True, image_base64=None, 
             coords = phone_cmd[4:].strip().split()
             if len(coords) >= 2:
                 x, y = coords[0], coords[1]
-                devices = adb_manager.list_devices()
-                if devices:
-                    target = devices[0]["id"]
-                    phone_res = adb_manager.send_tap(target, x, y)
+                target = get_active_phone_id()
+                if target:
+                    phone_res = adb_manager.send_tap_fast(target, x, y)
                     if phone_res["status"] == "success":
                         res["output"] = f"Tapped screen at ({x}, {y}) on device {target}."
                     else:
@@ -867,11 +1054,30 @@ def _execute_command_internal(text, allow_llm_fallback=True, image_base64=None, 
             else:
                 res["status"] = "error"
                 res["output"] = "Invalid coordinates. Use: phone tap [x] [y]"
+        elif phone_cmd_lower.startswith("swipe ") or phone_cmd_lower.startswith("drag ") or phone_cmd_lower.startswith("scroll "):
+            cmd_prefix = "swipe " if phone_cmd_lower.startswith("swipe ") else ("drag " if phone_cmd_lower.startswith("drag ") else "scroll ")
+            parts = phone_cmd[len(cmd_prefix):].strip().split()
+            if len(parts) >= 4:
+                x1, y1, x2, y2 = parts[0], parts[1], parts[2], parts[3]
+                dur = int(parts[4]) if len(parts) >= 5 and parts[4].isdigit() else 300
+                target = get_active_phone_id()
+                if target:
+                    phone_res = adb_manager.send_swipe_fast(target, x1, y1, x2, y2, dur)
+                    if phone_res["status"] == "success":
+                        res["output"] = f"Swiped from ({x1}, {y1}) to ({x2}, {y2}) on {target}."
+                    else:
+                        res["status"] = "error"
+                        res["output"] = f"Failed to swipe: {phone_res.get('message')}"
+                else:
+                    res["status"] = "error"
+                    res["output"] = "No connected phone found via ADB."
+            else:
+                res["status"] = "error"
+                res["output"] = "Invalid swipe coordinates. Use: phone swipe [x1] [y1] [x2] [y2] [duration]"
         elif phone_cmd_lower.startswith("type "):
             text_to_type = phone_cmd[5:].strip()
-            devices = adb_manager.list_devices()
-            if devices:
-                target = devices[0]["id"]
+            target = get_active_phone_id()
+            if target:
                 phone_res = adb_manager.send_text(target, text_to_type)
                 if phone_res["status"] == "success":
                     res["output"] = f"Typed '{text_to_type}' on phone screen."
@@ -883,9 +1089,8 @@ def _execute_command_internal(text, allow_llm_fallback=True, image_base64=None, 
                 res["output"] = "No connected phone found via ADB."
         elif phone_cmd_lower.startswith("open ") or phone_cmd_lower.startswith("launch "):
             app = phone_cmd[phone_cmd_lower.index(" ") + 1:].strip()
-            devices = adb_manager.list_devices()
-            if devices:
-                target = devices[0]["id"]
+            target = get_active_phone_id()
+            if target:
                 phone_res = adb_manager.launch_app(target, app)
                 if phone_res["status"] == "success":
                     res["output"] = f"Launched app '{app}' on phone."
@@ -912,24 +1117,56 @@ def _execute_command_internal(text, allow_llm_fallback=True, image_base64=None, 
             res["status"] = phone_agent_res["status"]
             res["output"] = phone_agent_res["output"]
         elif phone_cmd_lower == "screenshot":
-            active = [d for d in adb_manager.list_devices() if d["status"] == "device"]
-            if not active:
+            target = get_active_phone_id()
+            if not target:
                 res["status"] = "error"
                 res["output"] = "No connected phone found via ADB."
             else:
                 from backend.phone_agent import PHONE_SCREENSHOTS_DIR
                 os.makedirs(PHONE_SCREENSHOTS_DIR, exist_ok=True)
                 path = os.path.join(PHONE_SCREENSHOTS_DIR, f"phone_{time.strftime('%Y%m%d_%H%M%S')}.png")
-                shot = adb_manager.screenshot(active[0]["id"], path)
+                shot = adb_manager.screenshot(target, path)
                 if shot["status"] == "success":
                     res["output"] = f"Saved phone screenshot to {path}."
                 else:
                     res["status"] = "error"
                     res["output"] = f"Failed to capture phone screen: {shot.get('message')}"
+        elif phone_cmd_lower.startswith("rotate ") or phone_cmd_lower.startswith("autorotate ") or phone_cmd_lower in ("rotate", "autorotate"):
+            action = phone_cmd_lower.replace("autorotate", "").replace("rotate", "").strip() or "toggle"
+            target = get_active_phone_id()
+            if not target:
+                res["status"] = "error"
+                res["output"] = "No connected phone found via ADB."
+            else:
+                if action in ("off", "lock", "disable", "portrait", "0"):
+                    r = adb_manager.set_auto_rotate(target, enable=False)
+                    res["output"] = f"Auto-rotate disabled (locked to portrait) on {target}."
+                elif action in ("on", "enable", "unlock", "1"):
+                    r = adb_manager.set_auto_rotate(target, enable=True)
+                    res["output"] = f"Auto-rotate enabled on {target}."
+                elif action in ("status", "get", "check"):
+                    curr = adb_manager.get_auto_rotate(target)
+                    state = "ENABLED" if curr.get("auto_rotate") else "DISABLED (LOCKED)"
+                    res["output"] = f"Auto-rotate is currently {state} on {target}."
+                else:
+                    # Toggle
+                    curr = adb_manager.get_auto_rotate(target)
+                    new_state = not curr.get("auto_rotate", False)
+                    adb_manager.set_auto_rotate(target, enable=new_state)
+                    res["output"] = f"Auto-rotate {'enabled' if new_state else 'disabled (locked)'} on {target}."
         else:
             res["status"] = "error"
             res["output"] = f"Unknown Phone command: {phone_cmd}"
         return res
+
+    elif text_lower.startswith("pc do ") or text_lower.startswith("computer do ") or text_lower.startswith("pc execute "):
+        task_text = text[text_lower.index("do ") + 3:].strip() if "do " in text_lower else text[text_lower.index("execute ") + 8:].strip()
+        from backend.pc_agent import run_pc_agent
+        return run_pc_agent(task_text, window=window)
+
+    elif text_lower in ("pc look", "pc see", "pc vision", "look at screen", "look at my screen", "what's on my screen", "what is on my screen", "describe screen", "read screen", "analyze screen", "see screen") or text_lower.startswith("pc describe"):
+        from backend.pc_agent import describe_pc_screen
+        return describe_pc_screen(prompt=text, window=window)
 
     res["status"] = "error"
     res["output"] = f"Unknown command: {text}"
@@ -937,9 +1174,11 @@ def _execute_command_internal(text, allow_llm_fallback=True, image_base64=None, 
 
 def _is_direct_device_command(text_lower):
     """True for device-control commands that should run instantly without LLM or cache."""
+    if text_lower.startswith("pc do ") or text_lower.startswith("computer do ") or text_lower.startswith("pc execute ") or text_lower in ("pc look", "pc see", "pc vision", "look at screen", "look at my screen", "what's on my screen", "what is on my screen", "describe screen", "read screen", "analyze screen", "see screen") or text_lower.startswith("pc describe"):
+        return True
     if text_lower.startswith("phone "):
         rest = text_lower[6:].strip()
-        for verb in ("connect", "pair", "status", "mirror", "screen", "button", "keyevent", "key", "tap", "type", "open", "launch", "do", "execute", "look", "see", "screenshot"):
+        for verb in ("connect", "pair", "status", "mirror", "screen", "button", "keyevent", "key", "tap", "type", "open", "launch", "do", "execute", "look", "see", "screenshot", "rotate", "autorotate"):
             if rest.startswith(verb):
                 return True
         return False
@@ -955,9 +1194,19 @@ def _is_direct_device_command(text_lower):
         return True
     if text_lower.startswith("device "):
         return text_lower[7:].strip() == "status"
+    if text_lower in (
+        "enable autostart", "enable auto start", "turn on autostart", "start on boot", "launch on startup", "enable startup",
+        "disable autostart", "disable auto start", "turn off autostart", "disable startup", "don't start on boot",
+        "autostart status", "is autostart enabled", "check autostart",
+        "lock pc", "lock computer", "sleep", "mute", "unmute", "volume up", "volume down",
+        "turn on wifi", "turn off wifi", "screenshot", "empty recycle bin", "close folders",
+        "play", "pause", "resume", "play music", "pause music", "resume music", "toggle media",
+        "next track", "next", "next song", "skip track", "previous track", "previous", "previous song"
+    ) or text_lower.startswith("volume "):
+        return True
     return False
 
-def execute_command(text, quiet=False, image_base64=None, image_mime=None, window=None):
+def execute_command(text, quiet=False, image_base64=None, image_mime=None, window=None, stream_callback=None):
     add_user_command_history(text)
     from backend.sys_utils import logger
     logger.log_command(text, "processing")
@@ -966,7 +1215,7 @@ def execute_command(text, quiet=False, image_base64=None, image_mime=None, windo
     if _is_direct_device_command(text_lower):
         result = _execute_command_internal(text, allow_llm_fallback=False, image_base64=image_base64, image_mime=image_mime, window=window)
     else:
-        result = _execute_command_internal(text, allow_llm_fallback=True, image_base64=image_base64, image_mime=image_mime, window=window)
+        result = _execute_command_internal(text, allow_llm_fallback=True, image_base64=image_base64, image_mime=image_mime, window=window, stream_callback=stream_callback)
     execution_time = time.time() - start_time
     logger.log_command(text, f"completed in {execution_time:.2f}s", execution_time)
     if not quiet:

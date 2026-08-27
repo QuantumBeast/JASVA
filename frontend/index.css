@@ -2652,3 +2652,560 @@ button:active {
     gap: 8px;
     align-items: center;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   DOCK SEGMENTED TABS & MULTI-HUB PANELS
+══════════════════════════════════════════════════════════════ */
+.dock-segmented-tabs {
+    display: flex;
+    gap: 3px;
+    background: rgba(0, 0, 0, 0.4);
+    padding: 3px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    margin: 0 auto;
+}
+
+.dock-tab-btn {
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 4px 8px;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.58rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    -webkit-app-region: no-drag;
+}
+
+.dock-tab-btn:hover {
+    color: var(--accent-color);
+    background: rgba(0, 242, 254, 0.08);
+}
+
+.dock-tab-btn.active {
+    background: var(--accent-color);
+    color: #000;
+    box-shadow: 0 0 10px var(--accent-glow);
+}
+
+.dock-tab-content {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 10px 12px;
+    gap: 10px;
+}
+
+.dock-tab-content.active {
+    display: flex !important;
+}
+
+/* Action Rows (Power + Mirror) */
+.connect-action-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.power-hud-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: rgba(255, 59, 48, 0.12);
+    border: 1px solid rgba(255, 59, 48, 0.4);
+    border-radius: 8px;
+    color: #ff6b60;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    padding: 8px 10px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    -webkit-app-region: no-drag;
+}
+.power-hud-btn:hover {
+    background: rgba(255, 59, 48, 0.25);
+    box-shadow: 0 0 10px rgba(255, 59, 48, 0.35);
+    color: #ff3b30;
+}
+.power-hud-btn:active {
+    background: #ff3b30;
+    color: #fff;
+    transform: scale(0.95);
+}
+
+.mirror-hud-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: var(--accent-gradient);
+    border: none;
+    border-radius: 8px;
+    color: #000;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    padding: 8px 10px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    -webkit-app-region: no-drag;
+}
+.mirror-hud-btn:hover {
+    opacity: 0.9;
+    box-shadow: 0 0 12px var(--accent-glow);
+    transform: scale(1.02);
+}
+.mirror-hud-btn:active {
+    transform: scale(0.96);
+}
+
+/* TV D-Pad */
+.hud-dpad-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    margin: 8px 0;
+}
+.dpad-mid-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.dpad-btn {
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.45);
+    border: 1px solid var(--border-color);
+    border-radius: 50%;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    -webkit-app-region: no-drag;
+}
+.dpad-btn:hover {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+    box-shadow: 0 0 8px var(--accent-glow);
+}
+.dpad-btn:active {
+    background: var(--accent-color);
+    color: #000;
+    transform: scale(0.92);
+}
+.dpad-center-ok {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 242, 254, 0.12);
+    border: 2px solid var(--accent-color);
+    border-radius: 50%;
+    color: var(--accent-color);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    -webkit-app-region: no-drag;
+}
+.dpad-center-ok:hover {
+    background: rgba(0, 242, 254, 0.25);
+    box-shadow: 0 0 14px var(--accent-glow);
+}
+.dpad-center-ok:active {
+    background: var(--accent-color);
+    color: #000;
+    transform: scale(0.92);
+}
+
+/* TV & Phone Function Grids */
+.hud-ctrl-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-top: 8px;
+}
+.hud-grid-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 8px 4px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.55rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    -webkit-app-region: no-drag;
+}
+.hud-grid-btn:hover {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+    box-shadow: 0 0 8px var(--accent-glow);
+}
+.hud-grid-btn:active {
+    background: var(--accent-color);
+    color: #000;
+    transform: scale(0.94);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   MEDIA PLAYER & LIVE SYNCHRONIZED LYRICS
+══════════════════════════════════════════════════════════════ */
+.media-now-playing-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 12px;
+    position: relative;
+    overflow: hidden;
+}
+.media-art-wrap {
+    width: 54px;
+    height: 54px;
+    border-radius: 10px;
+    position: relative;
+    flex-shrink: 0;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.media-art-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 10px;
+}
+.media-disc-placeholder {
+    color: var(--accent-color);
+    opacity: 0.7;
+    animation: discSpin 10s linear infinite;
+}
+@keyframes discSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+.media-track-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.media-track-title {
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.media-track-artist {
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.media-source-badge {
+    align-self: flex-start;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.5rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(0, 242, 254, 0.1);
+    border: 1px solid rgba(0, 242, 254, 0.25);
+    color: var(--accent-color);
+    margin-top: 2px;
+}
+
+.media-controls-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 4px 0;
+}
+.media-ctrl-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    -webkit-app-region: no-drag;
+}
+.media-ctrl-btn:hover {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+    box-shadow: 0 0 8px var(--accent-glow);
+}
+.media-ctrl-play-btn {
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    background: var(--accent-gradient);
+    border: none;
+    color: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 0 14px var(--accent-glow);
+    transition: all 0.15s ease;
+    -webkit-app-region: no-drag;
+}
+.media-ctrl-play-btn:hover {
+    transform: scale(1.06);
+    box-shadow: 0 0 20px var(--accent-glow);
+}
+
+.media-volume-section {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 10px;
+}
+.media-volume-header {
+    display: flex;
+    justify-content: space-between;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.58rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+
+.media-lyrics-card {
+    flex: 1;
+    min-height: 120px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+}
+.media-lyrics-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.58rem;
+    font-weight: 700;
+    color: var(--accent-color);
+    margin-bottom: 8px;
+}
+.media-live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent-color);
+    box-shadow: 0 0 6px var(--accent-color);
+    animation: pulse 1.5s infinite;
+}
+.media-lyrics-scroll {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-right: 4px;
+}
+.lyric-line {
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+    transition: all 0.25s ease;
+}
+.lyric-line.active {
+    color: var(--accent-color);
+    font-weight: 700;
+    font-size: 0.85rem;
+    text-shadow: 0 0 10px var(--accent-glow);
+}
+.lyric-line.placeholder {
+    font-style: italic;
+    opacity: 0.5;
+    text-align: center;
+    padding-top: 15px;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   AGENDA & CALENDAR STYLING
+══════════════════════════════════════════════════════════════ */
+.agenda-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+.agenda-export-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(0, 242, 254, 0.08);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--accent-color);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.55rem;
+    font-weight: 700;
+    padding: 4px 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    -webkit-app-region: no-drag;
+}
+.agenda-export-btn:hover {
+    background: rgba(0, 242, 254, 0.18);
+    box-shadow: 0 0 8px var(--accent-glow);
+}
+
+.agenda-events-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+.agenda-event-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 8px 10px;
+    transition: all 0.15s ease;
+}
+.agenda-event-card:hover {
+    border-color: var(--accent-color);
+}
+.agenda-event-card.completed {
+    opacity: 0.5;
+}
+.agenda-event-card.completed .agenda-event-title-text {
+    text-decoration: line-through;
+}
+.agenda-event-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
+}
+.agenda-checkbox {
+    cursor: pointer;
+    accent-color: var(--accent-color);
+}
+.agenda-event-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.agenda-event-title-text {
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.agenda-event-time-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.56rem;
+    color: var(--text-muted);
+}
+.agenda-event-cat-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.5rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.05em;
+}
+.agenda-cat-work {
+    background: rgba(0, 242, 254, 0.12);
+    color: var(--accent-color);
+    border: 1px solid rgba(0, 242, 254, 0.3);
+}
+.agenda-cat-personal {
+    background: rgba(189, 0, 255, 0.12);
+    color: #bd00ff;
+    border: 1px solid rgba(189, 0, 255, 0.3);
+}
+.agenda-cat-urgent {
+    background: rgba(255, 59, 48, 0.12);
+    color: #ff3b30;
+    border: 1px solid rgba(255, 59, 48, 0.3);
+}
+.agenda-delete-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 14px;
+    cursor: pointer;
+    padding: 0 4px;
+    transition: color 0.15s ease;
+    -webkit-app-region: no-drag;
+}
+.agenda-delete-btn:hover {
+    color: var(--error-color);
+}
+.agenda-empty-state {
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 16px;
+    font-style: italic;
+}
+
+.agenda-add-dock {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 10px;
+    margin-top: auto;
+}
+.agenda-date-time-row {
+    display: flex;
+    gap: 4px;
+}
