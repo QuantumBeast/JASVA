@@ -6,7 +6,7 @@ JASVA is a Windows desktop AI assistant presented as a frameless, multi-window
 and it bridges AI conversation with real control of your PC, Android phone, and
 Android TV.
 
-![JASVA](frontend/icon.ico)
+![JASVA](frontend/icon.png)
 
 ## ✨ Features
 
