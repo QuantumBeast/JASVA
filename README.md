@@ -36,29 +36,6 @@ Android TV.
   wake-up, crash recovery, heartbeat monitoring, media-sync monitor, and a
   multi-device HTTP/WebSocket integration server.
 
-## 🗂 Architecture
-
-```
-app.pyw               Entry point — creates all webview windows + system tray,
-                      autostart, crash recovery, and the JasvaAPI JS bridge
-backend/
-  sys_utils.py        Config, credentials, system metrics, PC control helpers
-  ai_services.py      AI providers, TTS (ElevenLabs / Edge TTS), web & media
-  nlp_engine.py       Intent classification, sentiment, entities, coreference
-  command_router.py   Routes commands to handlers, offline fallback, automations
-  memory_scheduler.py Memory profile, facts, alarms/timers, notifications
-  adb_manager.py      Persistent ADB shell + Android device management
-  tv_manager.py       Android TV control (buttons, apps, YouTube, mirror)
-  phone_agent.py      Vision-based autonomous phone task agent
-  music_monitor.py    Media playback monitoring & control
-  multi_device_server.py  HTTP/WebSocket server for remote device integration
-frontend/
-  index.html          Chat / sphere / monitor / control / settings panels
-  chat.js, sphere.js  UI logic and cross-window state sync
-  controls.html       Phone & TV remote controls
-  music.html, remote.html
-JASVA.spec            PyInstaller build spec
-```
 
 ## 🚀 Getting Started
 
@@ -76,8 +53,6 @@ Create `backend/.env` (git-ignored), or set them in the **Settings** panel:
 
 ```env
 GEMINI_API_KEY=...
-GROQ_API_KEY=...
-PUTER_API_KEY=...
 ELEVENLABS_API_KEY=...
 ```
 
@@ -101,18 +76,6 @@ set a timer for 5 minutes         remember my coffee order
 what's the weather in tokyo       lock pc / volume 40 / screenshot
 ```
 
-## 📦 Building a standalone EXE
-
-```bash
-pyinstaller JASVA.spec
-```
-
-The spec bundles the frontend assets and icon, producing `dist/JASVA.exe`.
-
-## 🤝 Project Rules
-
-- **No virtual environments** — run Python and PyInstaller directly on the
-  local system environment (see `.agents/AGENTS.md`).
 
 ## 📄 License
 
